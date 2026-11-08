@@ -1,0 +1,60 @@
+plugins { id 'base' }
+
+ext {
+    springVersion = '7.0.10'
+    springDataVersion = '2026.0.2'
+    springSecurityVersion = '7.1.2'
+    paperVersion = '26.3.build.244-stable'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'maven-publish'
+    group = rootProject.group
+    version = rootProject.version
+    repositories {
+        mavenCentral()
+        maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
+        gradlePluginPortal()
+    }
+    java {
+        toolchain { languageVersion = JavaLanguageVersion.of(25) }
+        withSourcesJar()
+        withJavadocJar()
+    }
+    tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+    dependencies {
+        api platform("org.springframework:spring-framework-bom:${rootProject.springVersion}")
+        testImplementation platform('org.junit:junit-bom:6.0.3')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+    tasks.withType(Test).configureEach { useJUnitPlatform() }
+    publishing {
+        publications {
+            if (project.name != 'spring-paper-gradle-plugin') {
+                mavenJava(MavenPublication) { from components.java }
+            }
+        }
+    }
+}
+
+tasks.register('verifySourceSize') {
+    group = 'verification'
+    description = 'Enforces the agreed 600-line limit for maintained source and documentation.'
+    def sources = fileTree(rootDir) {
+        exclude '**/.git/**', '**/.gradle/**', '**/build/**', '**/run/**', 'gradlew', 'gradlew.bat'
+        include '**/*.java', '**/*.gradle', '**/*.md', '**/*.yml', '**/*.properties'
+    }
+    inputs.files(sources)
+    doLast {
+        def oversized = sources.files.findAll { it.readLines('UTF-8').size() > 600 }
+        if (!oversized.empty) throw new GradleException("Files exceed 600 lines: ${oversized}")
+    }
+}
+tasks.named('check') { dependsOn 'verifySourceSize', subprojects.collect { it.tasks.named('check') } }
+tasks.named('assemble') { dependsOn subprojects.collect { it.tasks.named('assemble') } }

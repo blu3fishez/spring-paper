@@ -1,0 +1,7 @@
+dependencies {
+    api project(':spring-paper-core')
+    api 'org.springframework:spring-context-support'
+    implementation 'org.springframework:spring-tx'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.2.4'
+    testImplementation "io.papermc.paper:paper-api:${rootProject.paperVersion}"
+}

@@ -1,0 +1,23 @@
+plugins { id 'java-gradle-plugin' }
+dependencies {
+    implementation project(':spring-paper-config')
+    implementation 'xyz.jpenilla:run-task:3.0.2'
+    implementation 'com.gradleup.shadow:shadow-gradle-plugin:9.6.0'
+    implementation 'org.ow2.asm:asm:9.9.1'
+    testImplementation gradleTestKit()
+}
+gradlePlugin {
+    plugins {
+        springPaper {
+            id = 'org.blu3fishez.spring-paper'
+            implementationClass = 'org.blu3fishez.springpaper.gradle.SpringPaperPlugin'
+            displayName = 'Spring Paper'
+            description = 'Build, package and run annotation-configured Spring Paper plugins.'
+        }
+    }
+}
+tasks.named('processResources') {
+    def properties = [version: project.version.toString()]
+    inputs.properties(properties)
+    filesMatching('spring-paper-version.properties') { expand(properties) }
+}

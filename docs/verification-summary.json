@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-08",
+  "junit": {
+    "tests": 23,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "modules": {
+    "spring-paper-gradle-plugin": 1,
+    "spring-paper-security": 2,
+    "spring-paper-cache": 2,
+    "spring-paper-core": 11,
+    "spring-paper-data-jpa": 3,
+    "spring-paper-config": 4
+  },
+  "example_jar": {
+    "sha256": "1bd441de2874af65928ece952ede1f80579cdff8603adfe22580a998a4f4894f",
+    "bytes": 39916718,
+    "duplicate_entries": 0,
+    "boot_classes": 0,
+    "bukkit_classes": 0,
+    "slf4j_classes": 0,
+    "project_class_major_versions": [
+      69
+    ],
+    "module_providers": [
+      "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.cache.CacheModule",
+      "org.blu3fishez.springpaper.security.SecurityModule"
+    ]
+  },
+  "local_server": {
+    "state": "pending_explicit_eula_acceptance",
+    "executed": false
+  }
+}

@@ -1,0 +1,84 @@
+package org.blu3fishez.springpaper.listener;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
+import org.blu3fishez.springpaper.service.PaperInvocationService;
+import org.blu3fishez.springpaper.spi.PaperInvocation;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventException;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityEvent;
+import org.bukkit.event.player.PlayerEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.util.ReflectionUtils;
+
+/** Owns only its listener tokens, preserving Paper's priority, cancellation and calling thread. */
+public final class PaperListenerRegistrar implements AutoCloseable {
+    private final JavaPlugin plugin;
+    private final PaperInvocationService invocations;
+    private final List<Listener> registrations = new ArrayList<>();
+    private volatile boolean closed;
+
+    public PaperListenerRegistrar(JavaPlugin plugin, PaperInvocationService invocations) {
+        this.plugin = plugin;
+        this.invocations = invocations;
+    }
+
+    @SuppressWarnings("unchecked")
+    public void register(String name, Object bean, Class<?> type) {
+        if (!(bean instanceof Listener)) throw new IllegalArgumentException(name + " must implement Bukkit Listener");
+        Listener token = new Listener() {};
+        registrations.add(token);
+        for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
+            EventHandler handler = method.getAnnotation(EventHandler.class);
+            if (handler == null || method.isBridge() || method.isSynthetic()) continue;
+            if (!Modifier.isPublic(method.getModifiers()) || Modifier.isStatic(method.getModifiers())
+                    || method.getParameterCount() != 1 || method.getReturnType() != void.class
+                    || !Event.class.isAssignableFrom(method.getParameterTypes()[0])) {
+                throw new IllegalArgumentException(name + ": @EventHandler requires public void method(Event)");
+            }
+            Method invocable;
+            try { invocable = AopUtils.selectInvocableMethod(method, bean.getClass()); }
+            catch (IllegalStateException error) {
+                throw new IllegalArgumentException(name + ": event method is hidden by a JDK proxy; move advice to a service or expose an invocable interface", error);
+            }
+            Class<? extends Event> eventType = (Class<? extends Event>) method.getParameterTypes()[0];
+            plugin.getServer().getPluginManager().registerEvent(eventType, token, handler.priority(),
+                    (listener, event) -> {
+                        if (closed || !eventType.isInstance(event)) return;
+                        try {
+                            invocations.invoke(new PaperInvocation(caller(event), event, event.isAsynchronous(), PaperInvocation.Kind.EVENT),
+                                    () -> invoke(invocable, bean, event));
+                        } catch (Exception error) { throw new EventException(error); }
+                    }, plugin, handler.ignoreCancelled());
+        }
+    }
+
+    private static Object invoke(Method method, Object bean, Event event) throws Exception {
+        try { return method.invoke(bean, event); }
+        catch (InvocationTargetException error) {
+            if (error.getCause() instanceof Exception exception) throw exception;
+            if (error.getCause() instanceof Error fatal) throw fatal;
+            throw error;
+        }
+    }
+    private static CommandSender caller(Event event) {
+        if (event instanceof PlayerEvent player) return player.getPlayer();
+        if (event instanceof EntityEvent entity && entity.getEntity() instanceof Player player) return player;
+        return null;
+    }
+    @Override public void close() {
+        if (closed) return;
+        closed = true;
+        registrations.forEach(HandlerList::unregisterAll);
+        registrations.clear();
+    }
+}
