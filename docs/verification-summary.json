@@ -1,7 +1,7 @@
 {
   "date": "2026-11-08",
   "junit": {
-    "tests": 23,
+    "tests": 30,
     "failures": 0,
     "errors": 0,
     "skipped": 0
@@ -10,13 +10,13 @@
     "spring-paper-gradle-plugin": 1,
     "spring-paper-security": 2,
     "spring-paper-cache": 2,
-    "spring-paper-core": 11,
+    "spring-paper-core": 18,
     "spring-paper-data-jpa": 3,
     "spring-paper-config": 4
   },
   "example_jar": {
-    "sha256": "1bd441de2874af65928ece952ede1f80579cdff8603adfe22580a998a4f4894f",
-    "bytes": 39916718,
+    "sha256": "ab84d91860d885e25e480c7713a38f92b000d3bec4aac6ed2e5528719c92cba8",
+    "bytes": 39917259,
     "duplicate_entries": 0,
     "boot_classes": 0,
     "bukkit_classes": 0,
@@ -29,6 +29,35 @@
       "org.blu3fishez.springpaper.cache.CacheModule",
       "org.blu3fishez.springpaper.security.SecurityModule"
     ]
+  },
+  "published_consumer": {
+    "version": "0.1.0-SNAPSHOT",
+    "repository": "build/verification-repository",
+    "consumer": "build/publication-consumer-j0fdldxx",
+    "included_build": false,
+    "configuration_cache_reused": true,
+    "jar": "build/publication-consumer-j0fdldxx/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "3078c7391bf788a4556504e9d71ec0481c2eedb8f2397a2de02d24b5c87979ef",
+    "current_library_classes_verified": 37,
+    "duplicate_entries": 0,
+    "forbidden_packages": {
+      "org/springframework/boot/": 0,
+      "org/bukkit/": 0,
+      "org/slf4j/": 0
+    },
+    "module_providers": [
+      "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.cache.CacheModule",
+      "org.blu3fishez.springpaper.security.SecurityModule"
+    ]
+  },
+  "paper_download": {
+    "minecraft": "26.3",
+    "build": "Specific(buildNumber=244)",
+    "bytes": 55279049,
+    "sha256": "9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf",
+    "server_started": false,
+    "eula_changed": false
   },
   "local_server": {
     "state": "pending_explicit_eula_acceptance",

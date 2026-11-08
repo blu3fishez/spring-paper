@@ -29,6 +29,8 @@ Gradle 개발 설정은 `springPaper.configurationFile`의 YAML(기본 src/main/
 | development.server-properties | server.properties에 합칠 키와 값. 다른 기존 키는 유지 |
 | lifecycle.shutdown-timeout-seconds | 기본 worker executor 종료 대기, 기본 5초. 사용자 flush의 별도 대기 정책을 대신하지 않음 |
 
+코어 워커는 사용자 stop 이후, DB·캐시 등 컨텍스트 인프라를 닫기 전에 새 제출을 차단하고 실행 중 작업을 기다린다. 컨텍스트 destruction은 시작 실패 정리를 위한 idempotent fallback으로도 close를 호출할 수 있다. 대기 시간이 지나면 워커를 interrupt하고 경고를 남기며, 실제 종료를 무한 대기하거나 저장 완료를 보장하지 않는다. 사용자 flush·멱등 재시도·내구성 정책은 각 기능이 유지한다.
+
 현재 실행 검증 대상은 Paper 26.3/Java 25다. 버전 설정 가능성과 모든 과거/미래 Paper 버전의 호환성은 다르다. 다른 버전은 적절한 API coordinate/JDK와 실제 기동을 검증해야 한다. Folia의 region scheduler는 지원하지 않는다.
 
 ## JPA

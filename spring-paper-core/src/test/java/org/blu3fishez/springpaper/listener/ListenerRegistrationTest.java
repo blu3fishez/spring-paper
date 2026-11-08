@@ -23,6 +23,61 @@ class ListenerRegistrationTest {
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         public void onEvent(ObservedEvent event) { calls++; }
     }
+    public static class OverriddenEvents extends Events {
+        @Override @EventHandler
+        public void onEvent(ObservedEvent event) { calls += 7; }
+    }
+    public static class DisabledOverride extends Events {
+        @Override public void onEvent(ObservedEvent event) { calls += 11; }
+    }
+    public static class InheritedEvents extends Events {}
+
+    @Test void registersAnAnnotatedOverrideOnce() throws Exception {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        PluginManager manager = mock(PluginManager.class);
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(manager);
+        OverriddenEvents bean = new OverriddenEvents();
+        try (var registrar = new PaperListenerRegistrar(plugin, new PaperInvocationService(List.of()))) {
+            registrar.register("overridden", bean, OverriddenEvents.class);
+            var token = ArgumentCaptor.forClass(Listener.class);
+            var callback = ArgumentCaptor.forClass(EventExecutor.class);
+            verify(manager, times(1)).registerEvent(eq(ObservedEvent.class), token.capture(),
+                    eq(EventPriority.NORMAL), callback.capture(), eq(plugin), eq(false));
+            verifyNoMoreInteractions(manager);
+            callback.getValue().execute(token.getValue(), new ObservedEvent());
+            assertEquals(7, bean.calls);
+        }
+    }
+    @Test void anUnannotatedOverrideDoesNotRetainTheParentHandler() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        PluginManager manager = mock(PluginManager.class);
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(manager);
+        try (var registrar = new PaperListenerRegistrar(plugin, new PaperInvocationService(List.of()))) {
+            registrar.register("disabled", new DisabledOverride(), DisabledOverride.class);
+            verifyNoInteractions(manager);
+        }
+    }
+    @Test void keepsAnInheritedHandlerWhenItWasNotOverridden() throws Exception {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        PluginManager manager = mock(PluginManager.class);
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(manager);
+        InheritedEvents bean = new InheritedEvents();
+        try (var registrar = new PaperListenerRegistrar(plugin, new PaperInvocationService(List.of()))) {
+            registrar.register("inherited", bean, InheritedEvents.class);
+            var token = ArgumentCaptor.forClass(Listener.class);
+            var callback = ArgumentCaptor.forClass(EventExecutor.class);
+            verify(manager).registerEvent(eq(ObservedEvent.class), token.capture(), eq(EventPriority.MONITOR),
+                    callback.capture(), eq(plugin), eq(true));
+            callback.getValue().execute(token.getValue(), new ObservedEvent());
+            assertEquals(1, bean.calls);
+        }
+    }
     @Test void preservesNativeOptionsAndStopsStaleCallbacks() throws Exception {
         JavaPlugin plugin = mock(JavaPlugin.class);
         Server server = mock(Server.class);

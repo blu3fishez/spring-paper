@@ -9,11 +9,12 @@ import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 
 @Configuration(proxyBeanMethods = false)
 public class PaperCoreConfiguration {
+    public static final String WORKERS_BEAN_NAME = "paperTasks";
     @Bean public static PaperBeanCatalog paperBeanCatalog() { return new PaperBeanCatalog(); }
     @Bean public static PropertySourcesPlaceholderConfigurer paperPlaceholders() {
         return new PropertySourcesPlaceholderConfigurer();
     }
-    @Bean public PaperTasks paperTasks(JavaPlugin plugin, PaperConfiguration configuration) {
+    @Bean(WORKERS_BEAN_NAME) public PaperTasks paperTasks(JavaPlugin plugin, PaperConfiguration configuration) {
         return new PaperTasks(plugin, configuration);
     }
 }

@@ -19,6 +19,7 @@ import org.blu3fishez.springpaper.service.PaperInvocationService;
 import org.blu3fishez.springpaper.spi.PaperInvocationInterceptor;
 import org.blu3fishez.springpaper.spi.SpringPaperModule;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
+import org.blu3fishez.springpaper.task.PaperTasks;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -123,7 +124,10 @@ public final class SpringPaperApplication implements AutoCloseable {
         Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
         RuntimeException failure = null;
         try {
-            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, context }) {
+            // Do not create a resource during failed-start cleanup. Spring remains the fallback owner.
+            AutoCloseable workers = context.getBeanFactory().getSingleton(PaperCoreConfiguration.WORKERS_BEAN_NAME)
+                    instanceof PaperTasks tasks ? tasks : null;
+            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, workers, context }) {
                 if (resource == null) continue;
                 try { resource.close(); }
                 catch (Exception error) {

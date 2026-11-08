@@ -51,6 +51,8 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 
+핸들러와 lifecycle 훅은 Java의 override 규칙을 따른다. 재정의한 메서드의 어노테이션만 적용하며 부모와 자식을 중복 등록하지 않는다. 재정의 메서드에서 어노테이션을 제거하면 부모의 어노테이션도 실행되지 않는다.
+
 ## 사용자 정의 시작·종료
 
 ```java
@@ -70,7 +72,7 @@ public final class GuideLifecycleService {
 
 훅이 소유하는 자원은 start/ready 이후에 획득한다. 아직 시작을 시도하지 않은 훅은 종료 때 호출하지 않는다. 컨텍스트 생성 중 획득할 DB·네트워크 자원은 별도 Spring 빈으로 두고 Spring의 정상 destruction 계약으로 정리한다.
 
-실행 순서는 설정 로딩 → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리하며 서버 JVM 전체를 종료하지 않는다.
+실행 순서는 설정 로딩 → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리하며 서버 JVM 전체를 종료하지 않는다.
 
 일반 Spring `@PostConstruct`와 `SmartLifecycle`은 컨텍스트 준비 작업자에서 실행될 수 있다. Paper 상태 변경은 `@PaperStart/@PaperStop`, ready 이벤트 또는 `PaperTasks.main`에서 수행한다.
 
@@ -119,6 +121,8 @@ Security는 기존 플랫폼 인증을 대체하지 않는다. 동기 명령·�
 ./gradlew -p examples/guide-plugin preparePaperServer
 ./gradlew -p examples/guide-plugin runServer
 ```
+
+`python3 scripts/verify-published-consumer.py`는 build/verification-repository에 Maven 배포물을 만들고 included build 없이 별도 소비 프로젝트를 빌드한다. 플러그인 marker와 모듈 의존성, 설정 캐시 재사용, SPI 병합과 호스트 API 제외를 확인한다. ~/.m2와 외부 배포 저장소에는 게시하지 않는다.
 
 예제는 included build로 이 저장소의 라이브러리와 Gradle 플러그인을 사용한다. `runServer`는 지정한 Paper 빌드를 다운로드하고 예제 Shadow JAR을 연결한다. EULA는 사용자가 확인한 뒤 YAML에서 명시적으로 수락한다. 기본값은 false다.
 

@@ -48,7 +48,7 @@ tasks.register('verifySourceSize') {
     description = 'Enforces the agreed 600-line limit for maintained source and documentation.'
     def sources = fileTree(rootDir) {
         exclude '**/.git/**', '**/.gradle/**', '**/build/**', '**/run/**', 'gradlew', 'gradlew.bat'
-        include '**/*.java', '**/*.gradle', '**/*.md', '**/*.yml', '**/*.properties'
+        include '**/*.java', '**/*.gradle', '**/*.md', '**/*.yml', '**/*.properties', '**/*.py', '**/*.json'
     }
     inputs.files(sources)
     doLast {

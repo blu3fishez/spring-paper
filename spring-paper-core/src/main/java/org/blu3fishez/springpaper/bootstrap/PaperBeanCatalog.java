@@ -32,8 +32,10 @@ public final class PaperBeanCatalog implements BeanPostProcessor, BeanFactoryAwa
         boolean stop = false;
         boolean lifecycle = false;
         for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
-            stop |= method.isAnnotationPresent(PaperStop.class);
             lifecycle |= method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class);
+        }
+        for (Method method : type.getMethods()) {
+            if (!method.isBridge() && !method.isSynthetic()) stop |= method.isAnnotationPresent(PaperStop.class);
         }
         if (stop) {
             if (bean instanceof DisposableBean) throw new IllegalArgumentException(beanName + ": use one shutdown owner, PaperStop or DisposableBean");

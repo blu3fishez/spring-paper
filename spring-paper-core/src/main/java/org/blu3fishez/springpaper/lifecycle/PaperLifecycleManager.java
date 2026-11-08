@@ -24,6 +24,10 @@ public final class PaperLifecycleManager implements AutoCloseable {
             Method start = null;
             Method stop = null;
             for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
+                if (method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class)) validate(method);
+            }
+            for (Method method : type.getMethods()) {
+                if (method.isBridge() || method.isSynthetic()) continue;
                 if (method.isAnnotationPresent(PaperStart.class)) {
                     if (start != null) throw new IllegalArgumentException(name + ": only one PaperStart is allowed");
                     start = validate(method);

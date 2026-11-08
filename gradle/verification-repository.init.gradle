@@ -1,0 +1,11 @@
+// Isolated publication target for the consumer verification script; never writes to ~/.m2.
+gradle.beforeProject { project ->
+    project.plugins.withId('maven-publish') {
+        project.publishing.repositories {
+            maven {
+                name = 'verification'
+                url = project.rootProject.layout.buildDirectory.dir('verification-repository')
+            }
+        }
+    }
+}

@@ -35,8 +35,6 @@ public final class PaperListenerRegistrar implements AutoCloseable {
     @SuppressWarnings("unchecked")
     public void register(String name, Object bean, Class<?> type) {
         if (!(bean instanceof Listener)) throw new IllegalArgumentException(name + " must implement Bukkit Listener");
-        Listener token = new Listener() {};
-        registrations.add(token);
         for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
             EventHandler handler = method.getAnnotation(EventHandler.class);
             if (handler == null || method.isBridge() || method.isSynthetic()) continue;
@@ -45,6 +43,13 @@ public final class PaperListenerRegistrar implements AutoCloseable {
                     || !Event.class.isAssignableFrom(method.getParameterTypes()[0])) {
                 throw new IllegalArgumentException(name + ": @EventHandler requires public void method(Event)");
             }
+        }
+        Listener token = new Listener() {};
+        registrations.add(token);
+        // Java's public method view resolves overrides; walking every declaration registers both.
+        for (Method method : type.getMethods()) {
+            EventHandler handler = method.getAnnotation(EventHandler.class);
+            if (handler == null || method.isBridge() || method.isSynthetic()) continue;
             Method invocable;
             try { invocable = AopUtils.selectInvocableMethod(method, bean.getClass()); }
             catch (IllegalStateException error) {

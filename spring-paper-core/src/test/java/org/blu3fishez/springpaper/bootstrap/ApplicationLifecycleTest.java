@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.beans.factory.annotation.Value;
+import org.blu3fishez.springpaper.task.PaperTasks;
 
 class ApplicationLifecycleTest {
     private static final List<String> actions = new ArrayList<>();
@@ -55,6 +56,40 @@ class ApplicationLifecycleTest {
     public static class LazyFeatures {
         @Bean @Lazy public Hooks hooks() { return new Hooks(); }
     }
+    @SpringPaperPluginApplication(name = "Inherited", configurations = InheritedFeatures.class)
+    public static class InheritedHost extends JavaPlugin {}
+    @Configuration(proxyBeanMethods = false)
+    public static class InheritedFeatures {
+        @Bean public OverriddenHooks hooks() { return new OverriddenHooks(); }
+    }
+    public static class OverriddenHooks extends Hooks {
+        @Override @PaperStart public void start() { actions.add("derived-start"); }
+        @Override @PaperStop public void close() { actions.add("derived-stop"); }
+    }
+    @SpringPaperPluginApplication(name = "Removed", configurations = RemovedFeatures.class)
+    public static class RemovedHost extends JavaPlugin {}
+    @Configuration(proxyBeanMethods = false)
+    public static class RemovedFeatures {
+        @Bean public RemovedHooks hooks() { return new RemovedHooks(); }
+    }
+    public static class RemovedHooks extends Hooks {
+        @Override public void start() { actions.add("must-not-start"); }
+        @Override public void close() { actions.add("native-close"); }
+    }
+    @SpringPaperPluginApplication(name = "Shutdown", configurations = ShutdownFeatures.class)
+    public static class ShutdownHost extends JavaPlugin {}
+    @Configuration(proxyBeanMethods = false)
+    public static class ShutdownFeatures {
+        @Bean public Infrastructure infrastructure(PaperTasks tasks) { return new Infrastructure(tasks); }
+    }
+    public static class Infrastructure implements AutoCloseable {
+        final PaperTasks tasks;
+        boolean rejectedDuringClose;
+        Infrastructure(PaperTasks tasks) { this.tasks = tasks; }
+        @Override public void close() {
+            rejectedDuringClose = tasks.async(() -> "must-not-start-during-resource-close").isCompletedExceptionally();
+        }
+    }
 
     private <T extends JavaPlugin> T host(Class<T> type) {
         mainThread = Thread.currentThread();
@@ -95,5 +130,25 @@ class ApplicationLifecycleTest {
         try (var application = SpringPaperApplication.run(plugin)) {
             assertEquals("configured", application.context().getBean(BoundSettings.class).message());
         }
+    }
+    @Test void treatsLifecycleOverridesAsSingleHooks() {
+        actions.clear();
+        try (var application = SpringPaperApplication.run(host(InheritedHost.class))) {
+            assertEquals(List.of("derived-start"), actions);
+        }
+        assertEquals(List.of("derived-start", "derived-stop"), actions);
+    }
+    @Test void unannotatedOverridesUseNormalSpringDestruction() {
+        actions.clear();
+        try (var application = SpringPaperApplication.run(host(RemovedHost.class))) {
+            assertEquals(List.of(), actions);
+        }
+        assertEquals(List.of("native-close"), actions);
+    }
+    @Test void stopsWorkerSubmissionBeforeInfrastructureIsDestroyed() {
+        var application = SpringPaperApplication.run(host(ShutdownHost.class));
+        Infrastructure infrastructure = application.context().getBean(Infrastructure.class);
+        application.close();
+        assertTrue(infrastructure.rejectedDuringClose, "infrastructure must not close while workers accept new work");
     }
 }
