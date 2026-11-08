@@ -98,6 +98,14 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 
 ## 라이브러리 확장
 
+진입점의 `initializers`는 Spring 표준 `ApplicationContextInitializer<ConfigurableApplicationContext>` 목록이다. Paper 메인 스레드에서 기존 host 설정을 읽거나 immutable singleton·PropertySource를 넣고, 이후 작업자 refresh에 전달한다. initializer 자체를 Spring component로 재생성하거나 별도 DI 컨테이너로 만들지 않는다.
+
+`@PaperEventListener`는 타입과 `@Bean` 메서드에서 사용할 수 있다. 기존 소유 객체가 만든 리스너를 factory로 노출하면 캡처한 세션과 callback을 공유한다. 입력 등록/해제는 Spring Paper가 소유하고, 소유 객체가 내부 작업을 닫는다면 factory에 `destroyMethod=""`를 지정한다. 실제 factory method와 타입의 어노테이션 조회 및 순서는 Spring BeanFactory의 표준 계약을 사용한다.
+
+`@PaperCommandExecutor`는 반복 선언할 수 있다. 레이블마다 다른 usage·permission 메타데이터를 생성하며 실행 객체는 하나다. 진입점 `permissions`는 `@PaperPermission(name=..., description=..., defaultValue=...)` 배열로 명령 밖의 권한도 선언한다. 같은 권한의 충돌하는 기본값은 빌드 오류다.
+
+시작/종료 훅의 `phaseString`은 정수 또는 Environment placeholder를 받는다. 명시적인 종료 phase는 높은 값부터 적용하고 같은 값은 실제 시작 순서를 뒤집는다. 기본 종료 phase는 시작 phase를 상속한다. 시작하지 않은 훅을 종료 시 새로 만들거나 실행하지 않는다. 소비자의 `onApplicationStartupFailure`는 부분 시작 정리 이후 호출된다.
+
 SpringPaperModule SPI는 코어가 호출하고 선택 모듈이 구현한다. META-INF/services 등록과 enabledProperty/configurationClass를 제공하면 활성화된 모듈 구성만 컨텍스트에 들어온다. provider 생성자는 I/O와 자원 생성을 하지 않는다.
 
 PaperInvocationInterceptor SPI는 코어의 이벤트·명령·탭 완성 경로를 감싼다. Spring orderedStream 순서를 따른다. 실제 빈은 생성자 주입하며, 어노테이션을 읽기 위해 프록시를 벗겨 원본을 호출하지 않는다.
@@ -117,6 +125,7 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | [GenericApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/GenericApplicationContext.java), [ConfigurationClassPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/ConfigurationClassPostProcessor.java) | 컨텍스트의 클래스 로더와 ResourceLoader를 분리한다. 구성 파서는 제공한 ResourceLoader로 메타데이터를 읽는다. 리소스 탐색은 PaperResourceLoader만 소유한다. |
 | [InitDestroyAnnotationBeanPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/annotation/InitDestroyAnnotationBeanPostProcessor.java), [MergedBeanDefinitionPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/MergedBeanDefinitionPostProcessor.java), [DisposableBeanAdapter](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/DisposableBeanAdapter.java) | PaperBeanCatalog는 merged metadata에서 후보와 외부 종료 소유권만 기록한다. 기반 definition 속성을 수정하거나 Paper 입력을 등록하지 않는다. PaperStop이 소유한 종료는 Spring이 다시 호출하지 않는다. |
 | [EventListenerMethodProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/EventListenerMethodProcessor.java) | 동일한 AopUtils.selectInvocableMethod 계약으로 관리 빈의 프록시를 호출한다. 메타데이터를 발견한 뒤 실제 입력을 여는 책임은 PaperListenerRegistrar/PaperCommandRegistrar가 맡는다. |
+| [DefaultListableBeanFactory](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/DefaultListableBeanFactory.java), [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java) | findAnnotationOnBean과 getOrder로 factory method metadata를 존중한다. package-private 어댑터의 public 메서드도 프록시에서 선택한 뒤 makeAccessible하며 원본 target으로 advice를 우회하지 않는다. |
 | [AbstractApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java) | refresh 실패의 singleton 정리와 컨텍스트 destruction은 Spring이 소유한다. 메인 스레드 사용자 훅과 입력 해제·워커 drain 순서만 SpringPaperApplication이 그 바깥에서 조정한다. |
 | [AbstractPlatformTransactionManager](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java) | beforeBegin이 doBegin보다 먼저 실행되는 공식 listener로 메인 스레드 DB 작업을 차단한다. 트랜잭션 구현은 JpaTransactionManager에 위임한다. |
 | [TransactionAwareCacheDecorator](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context-support/src/main/java/org/springframework/cache/transaction/TransactionAwareCacheDecorator.java) | put/evict/clear의 afterCommit 반영을 Spring에 위임한다. 자체 트랜잭션 캐시 동기화기를 만들지 않는다. |

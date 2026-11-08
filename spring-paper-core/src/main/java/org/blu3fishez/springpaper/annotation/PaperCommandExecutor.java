@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Component
+@Repeatable(PaperCommandExecutors.class)
 public @interface PaperCommandExecutor {
     String[] commands();
     String description() default "";

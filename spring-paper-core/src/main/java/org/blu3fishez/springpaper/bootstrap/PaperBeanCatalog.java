@@ -48,8 +48,13 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
                 }
             }
         }
-        if (lifecycle || AnnotatedElementUtils.hasAnnotation(type, PaperEventListener.class)
-                || AnnotatedElementUtils.hasAnnotation(type, PaperCommandExecutor.class)) candidates.put(beanName, type);
+        // Spring도 findAnnotationOnBean에서 실제 factory method metadata를 확인한다.
+        // 값/세션을 캡처한 기존 어댑터는 클래스 스캔 대신 @Bean에 등록 의도를 표현할 수 있다.
+        Method factoryMethod = definition.getResolvedFactoryMethod();
+        boolean listener = AnnotatedElementUtils.hasAnnotation(type, PaperEventListener.class)
+                || factoryMethod != null && AnnotatedElementUtils.hasAnnotation(factoryMethod, PaperEventListener.class);
+        if (lifecycle || listener
+                || !AnnotatedElementUtils.getMergedRepeatableAnnotations(type, PaperCommandExecutor.class).isEmpty()) candidates.put(beanName, type);
     }
 
     public Map<String, Class<?>> candidates() { return Map.copyOf(candidates); }

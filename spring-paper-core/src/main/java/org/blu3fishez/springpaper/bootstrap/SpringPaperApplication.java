@@ -66,6 +66,11 @@ public final class SpringPaperApplication implements AutoCloseable {
         factory.registerSingleton("paperServerInfo", new PaperServerInfo(plugin.getServer().getMinecraftVersion(),
                 plugin.getServer().getBukkitVersion(), plugin.getServer().getVersion(), Runtime.version().toString()));
         factory.registerSingleton("paperThreadAccess", (PaperThreadAccess) () -> plugin.getServer().isPrimaryThread());
+        // 기존 Bukkit 설정의 검증/host 객체 캡처는 Paper thread에서 끝내고 refresh worker에 값으로 전달한다.
+        // Spring의 표준 initializer를 사용하며 initializer 자체를 별도 컨테이너/서비스 로케이터로 만들지 않는다.
+        for (var initializer : annotation.initializers()) {
+            org.springframework.beans.BeanUtils.instantiateClass(initializer).initialize(context);
+        }
         context.addBeanFactoryPostProcessor(beans -> {
             for (String reserved : java.util.List.of("paperPlugin", "paperServer", "paperLogger", "paperConfiguration", "paperServerInfo", "paperThreadAccess")) {
                 if (beans.containsBeanDefinition(reserved)) throw new IllegalArgumentException("Reserved Spring Paper bean name: " + reserved);
@@ -73,8 +78,8 @@ public final class SpringPaperApplication implements AutoCloseable {
             for (String name : beans.getBeanDefinitionNames()) {
                 Class<?> type = beans.getType(name, false);
                 if (type == null) continue;
-                boolean adapter = AnnotatedElementUtils.hasAnnotation(type, PaperEventListener.class)
-                        || AnnotatedElementUtils.hasAnnotation(type, PaperCommandExecutor.class)
+                boolean adapter = beans.findAnnotationOnBean(name, PaperEventListener.class, false) != null
+                        || !AnnotatedElementUtils.getMergedRepeatableAnnotations(type, PaperCommandExecutor.class).isEmpty()
                         || Arrays.stream(org.springframework.util.ReflectionUtils.getAllDeclaredMethods(type))
                         .anyMatch(method -> method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class));
                 var definition = beans.getBeanDefinition(name);
@@ -103,11 +108,21 @@ public final class SpringPaperApplication implements AutoCloseable {
         var invocations = new PaperInvocationService(context.getBeanProvider(PaperInvocationInterceptor.class).orderedStream().toList(), loader);
         listeners = new PaperListenerRegistrar(plugin, invocations);
         commands = new PaperCommandRegistrar(plugin, invocations, context.getEnvironment()::resolveRequiredPlaceholders);
-        candidates.entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(entry -> {
-            Object bean = context.getBean(entry.getKey());
-            if (AnnotatedElementUtils.hasAnnotation(entry.getValue(), PaperEventListener.class)) listeners.register(entry.getKey(), bean, entry.getValue());
-            PaperCommandExecutor command = AnnotatedElementUtils.findMergedAnnotation(entry.getValue(), PaperCommandExecutor.class);
-            if (command != null) commands.register(entry.getKey(), bean, command);
+        // 같은 EventPriority의 전투 listener는 등록 순서도 게임 규칙이다. Spring 7의 getOrder가
+        // Ordered, 타입 및 @Bean factory method metadata를 해석하므로 별도 순서 해석기를 만들지 않는다.
+        candidates.entrySet().stream().map(entry -> new Adapter(entry.getKey(), context.getBean(entry.getKey()), entry.getValue()))
+                .sorted((left, right) -> {
+                    boolean leftPriority = left.bean instanceof org.springframework.core.PriorityOrdered;
+                    boolean rightPriority = right.bean instanceof org.springframework.core.PriorityOrdered;
+                    if (leftPriority != rightPriority) return leftPriority ? -1 : 1;
+                    int order = Integer.compare(context.getDefaultListableBeanFactory().getOrder(left.name, left.bean),
+                            context.getDefaultListableBeanFactory().getOrder(right.name, right.bean));
+                    return order == 0 ? left.name.compareTo(right.name) : order;
+                }).forEach(entry -> {
+            if (factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null) listeners.register(entry.name, entry.bean, entry.type);
+            for (PaperCommandExecutor command : AnnotatedElementUtils.getMergedRepeatableAnnotations(entry.type, PaperCommandExecutor.class)) {
+                commands.register(entry.name, entry.bean, command);
+            }
         });
         context.publishEvent(new PaperApplicationReadyEvent(plugin));
     }
@@ -119,6 +134,7 @@ public final class SpringPaperApplication implements AutoCloseable {
         try { action.run(); } finally { thread.setContextClassLoader(previous); }
     }
     public AnnotationConfigApplicationContext context() { return context; }
+    private record Adapter(String name, Object bean, Class<?> type) {}
 
     @Override public void close() {
         if (closed) return;

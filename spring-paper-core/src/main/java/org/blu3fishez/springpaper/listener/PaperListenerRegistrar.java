@@ -58,6 +58,10 @@ public final class PaperListenerRegistrar implements AutoCloseable {
             catch (IllegalStateException error) {
                 throw new IllegalArgumentException(name + ": event method is hidden by a JDK proxy; move advice to a service or expose an invocable interface", error);
             }
+            // 소비자 @Bean은 package-private 입력 어댑터도 반환할 수 있다. public 메서드라도 선언 클래스가
+            // 비공개이면 다른 패키지의 invoke가 실패한다. Spring ApplicationListenerMethodAdapter와 같이
+            // 프록시에서 선택한 메서드의 접근성만 보완하며 원본 target으로 advice를 우회하지 않는다.
+            ReflectionUtils.makeAccessible(invocable);
             Class<? extends Event> eventType = (Class<? extends Event>) method.getParameterTypes()[0];
             plugin.getServer().getPluginManager().registerEvent(eventType, token, handler.priority(),
                     (listener, event) -> {

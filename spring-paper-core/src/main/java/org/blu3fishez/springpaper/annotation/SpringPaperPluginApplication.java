@@ -5,6 +5,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import org.bukkit.plugin.PluginLoadOrder;
+import org.springframework.context.ApplicationContextInitializer;
+import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * Bootstrap metadata on the Paper-created plugin; it is never constructed by Spring.
@@ -15,6 +17,7 @@ import org.bukkit.plugin.PluginLoadOrder;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SpringPaperPluginApplication {
     String name();
+    String prefix() default "";
     String description() default "";
     String[] authors() default {};
     String website() default "";
@@ -22,7 +25,10 @@ public @interface SpringPaperPluginApplication {
     PluginLoadOrder load() default PluginLoadOrder.POSTWORLD;
     String[] depend() default {};
     String[] softDepend() default {};
+    PaperPermission[] permissions() default {};
     String configuration() default "application.yml";
     Class<?>[] configurations() default {};
     Class<?>[] scanBasePackageClasses() default {};
+    /** Run before refresh, on the Paper thread, for existing host configuration and singleton registration. */
+    Class<? extends ApplicationContextInitializer<ConfigurableApplicationContext>>[] initializers() default {};
 }

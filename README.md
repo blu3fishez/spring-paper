@@ -22,7 +22,9 @@ Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다
 public final class MyPlugin extends SpringPaperPlugin {}
 ```
 
-공통 부모가 `onEnable/onDisable`을 연결한다. 어노테이션 속성에서 이름·설명·작성자·웹사이트·API 버전·load·depend·softDepend·설정 리소스를 선언한다. `main`은 진입점에서, `version`은 Gradle 프로젝트 버전에서 가져와 `plugin.yml`을 생성한다.
+공통 부모가 `onEnable/onDisable`을 연결한다. 어노테이션 속성에서 이름·설명·작성자·웹사이트·prefix·API 버전·load·depend·softDepend·설정 리소스를 선언한다. `permissions = @PaperPermission(...)`으로 명령 밖에서도 사용하는 권한을 선언할 수 있다. `main`은 진입점에서, `version`은 Gradle 프로젝트 버전에서 가져와 `plugin.yml`을 생성한다.
+
+기존 호스트 설정을 캡처해야 하면 `initializers = ExistingSettingsInitializer.class`로 Spring 표준 `ApplicationContextInitializer<ConfigurableApplicationContext>`를 제공한다. 호스트 singleton 등록 후, 컨텍스트 refresh 전에 Paper 메인 스레드에서 실행된다. DB 연결 등 준비 작업은 이후 worker refresh의 일반 빈 초기화에 둔다.
 
 진입점 어노테이션 자체는 Spring component가 아니다. Paper가 만든 객체를 컨텍스트에 등록하며, Spring이 `JavaPlugin`을 다시 생성하지 않는다. 기능별 설정에서 제한된 스캔·`@Import`·`@Bean`을 사용한다. 서버 역할·인증 모드별 구현을 전체 패키지 스캔으로 동시에 등록하지 않는다.
 
@@ -51,6 +53,10 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 
 명령 메타데이터를 `plugin.yml`에 중복 작성하지 않는다. Gradle 플러그인은 소비 프로젝트 및 의존한 기능 JAR의 어노테이션을 바이트코드로 읽어 명령과 권한 정의를 합친다. 다른 역할에서 같은 명령을 구현해도 메타데이터가 같으면 허용하며, 실제 활성 컨텍스트에 실행기가 둘이면 시작을 거절한다.
 
+하나의 실행기가 서로 다른 usage·permission을 가진 명령을 처리하면 `@PaperCommandExecutor`를 반복한다. 같은 메타데이터를 공유하는 레이블은 기존 `commands` 배열을 사용한다.
+
+소유 객체의 상태·콜백을 캡처한 리스너는 `@Bean @PaperEventListener` 메서드에서 기존 인스턴스를 반환할 수 있다. 클래스에 component 어노테이션을 붙일 필요가 없다. 같은 우선순위의 이벤트 등록 순서는 Spring의 `PriorityOrdered`, `Ordered`, 타입·factory method의 `@Order`를 따르고, 같은 값이면 빈 이름순이다. Bukkit의 EventPriority가 서로 다르면 Bukkit 우선순위가 먼저 적용된다.
+
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 
 핸들러와 lifecycle 훅은 Java의 override 규칙을 따른다. 재정의한 메서드의 어노테이션만 적용하며 부모와 자식을 중복 등록하지 않는다. 재정의 메서드에서 어노테이션을 제거하면 부모의 어노테이션도 실행되지 않는다.
@@ -68,13 +74,13 @@ public final class GuideLifecycleService {
 }
 ```
 
-빈마다 public void 무인자 시작·종료 메서드를 하나씩 제공할 수 있다. 낮은 phase부터 시작하고, 같은 phase는 빈 이름순이다. 종료는 실제 시작 시도 순서의 역순이며 실패한 시작의 부분 정리도 호출한다. 다른 빈의 시작 완료가 필요하면 phase를 명시한다. `@DependsOn`은 Spring 빈 생성 순서이며 이 훅의 순서를 대신하지 않는다.
+빈마다 public void 무인자 시작·종료 메서드를 하나씩 제공할 수 있다. 낮은 phase부터 시작하고, 같은 phase는 빈 이름순이다. 기본 종료는 실제 시작 시도 순서의 역순이며 실패한 시작의 부분 정리도 호출한다. `@PaperStop(phase = ...)`로 종료 순서를 독립적으로 정하면 높은 값부터 닫는다. 양 훅의 `phaseString = "${feature.phase}"`은 역할별 정수 설정을 받을 수 있으며 기본값이 아닌 phase와 동시에 지정하지 않는다. `@DependsOn`은 Spring 빈 생성 순서이며 이 훅의 순서를 대신하지 않는다.
 
 동일 빈의 `@PaperStop`과 `@PreDestroy`/`DisposableBean`을 중복 사용하지 않는다. `@PaperStop`이 있으면 Spring의 명시적 `@Bean(destroyMethod=...)`와 AutoCloseable 추론 종료 대신 이 훅만 실행한다. 정리는 부분 초기화와 중복 호출에 안전해야 한다.
 
 훅이 소유하는 자원은 start/ready 이후에 획득한다. 아직 시작을 시도하지 않은 훅은 종료 때 호출하지 않는다. 컨텍스트 생성 중 획득할 DB·네트워크 자원은 별도 Spring 빈으로 두고 Spring의 정상 destruction 계약으로 정리한다.
 
-실행 순서는 설정 로딩 → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리하며 서버 JVM 전체를 종료하지 않는다.
+실행 순서는 설정 로딩·initializer → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리한다. 기본 실패 정책은 해당 플러그인을 실패시키며, 소비자가 `SpringPaperPlugin.onApplicationStartupFailure`를 재정의해 정리 후의 서버 운영 정책을 선택할 수 있다.
 
 일반 Spring `@PostConstruct`와 `SmartLifecycle`은 컨텍스트 준비 작업자에서 실행될 수 있다. Paper 상태 변경은 `@PaperStart/@PaperStop`, ready 이벤트 또는 `PaperTasks.main`에서 수행한다.
 

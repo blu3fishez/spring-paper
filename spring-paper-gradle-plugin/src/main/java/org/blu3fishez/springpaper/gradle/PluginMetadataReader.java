@@ -52,21 +52,45 @@ final class PluginMetadataReader {
                 if (applicationSource && descriptor.equals(PREFIX + "SpringPaperPluginApplication;")) {
                     data = applications.computeIfAbsent(name, key -> new LinkedHashMap<>());
                 } else if (descriptor.equals(PREFIX + "PaperCommandExecutor;")) {
-                    data = commands.computeIfAbsent(name, key -> new LinkedHashMap<>());
+                    data = command(name);
+                } else if (descriptor.equals(PREFIX + "PaperCommandExecutors;")) {
+                    String owner = name;
+                    return new AnnotationVisitor(Opcodes.ASM9) {
+                        @Override public AnnotationVisitor visitArray(String property) {
+                            if (!property.equals("value")) return null;
+                            return new AnnotationVisitor(Opcodes.ASM9) {
+                                @Override public AnnotationVisitor visitAnnotation(String ignored, String descriptor) {
+                                    return visitor(command(owner));
+                                }
+                            };
+                        }
+                    };
                 } else return null;
                 return visitor(data);
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+    }
+    private Map<String, Object> command(String owner) {
+        String key = owner;
+        for (int index = 1; commands.containsKey(key); index++) key = owner + "#" + index;
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        commands.put(key, metadata);
+        return metadata;
     }
     private static AnnotationVisitor visitor(Map<String, Object> target) {
         return new AnnotationVisitor(Opcodes.ASM9) {
             @Override public void visit(String name, Object value) { target.put(name, value.toString()); }
             @Override public void visitEnum(String name, String descriptor, String value) { target.put(name, value); }
             @Override public AnnotationVisitor visitArray(String name) {
-                List<String> values = new ArrayList<>();
+                List<Object> values = new ArrayList<>();
                 target.put(name, values);
                 return new AnnotationVisitor(Opcodes.ASM9) {
                     @Override public void visit(String ignored, Object value) { values.add(value.toString()); }
+                    @Override public AnnotationVisitor visitAnnotation(String ignored, String descriptor) {
+                        Map<String, Object> nested = new LinkedHashMap<>();
+                        values.add(nested);
+                        return visitor(nested);
+                    }
                 };
             }
         };

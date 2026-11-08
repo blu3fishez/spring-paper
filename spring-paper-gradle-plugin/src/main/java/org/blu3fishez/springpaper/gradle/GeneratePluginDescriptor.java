@@ -42,7 +42,7 @@ public abstract class GeneratePluginDescriptor extends DefaultTask {
         if (apiVersion.isBlank()) apiVersion = config.text("spring.paper.minecraft.api-version", config.required("spring.paper.minecraft.version"));
         output.put("api-version", apiVersion);
         output.put("load", metadata.getOrDefault("load", "POSTWORLD"));
-        for (String key : List.of("description", "authors", "website", "depend")) copy(metadata, output, key, key);
+        for (String key : List.of("prefix", "description", "authors", "website", "depend")) copy(metadata, output, key, key);
         copy(metadata, output, "softDepend", "softdepend");
         Map<String, Object> commands = new LinkedHashMap<>();
         Map<String, Object> permissions = new LinkedHashMap<>();
@@ -67,6 +67,7 @@ public abstract class GeneratePluginDescriptor extends DefaultTask {
                 if (prior != null && !prior.equals(definition)) throw new GradleException("Conflicting permission: " + permission);
             }
         });
+        PluginPermissions.merge(metadata.getOrDefault("permissions", List.of()), permissions);
         if (!commands.isEmpty()) output.put("commands", commands);
         if (!permissions.isEmpty()) output.put("permissions", permissions);
         DumperOptions options = new DumperOptions();
@@ -81,12 +82,17 @@ public abstract class GeneratePluginDescriptor extends DefaultTask {
         return value;
     }
     private static void resolve(Map<String, Object> metadata, PaperConfiguration config) {
-        metadata.replaceAll((key, value) -> {
-            if (value instanceof String text) return config.environment().resolveRequiredPlaceholders(text);
-            if (value instanceof List<?> list) return list.stream()
-                    .map(element -> config.environment().resolveRequiredPlaceholders(element.toString())).toList();
-            return value;
-        });
+        metadata.replaceAll((key, value) -> resolved(value, config));
+    }
+    private static Object resolved(Object value, PaperConfiguration config) {
+        if (value instanceof String text) return config.environment().resolveRequiredPlaceholders(text);
+        if (value instanceof List<?> list) return list.stream().map(element -> resolved(element, config)).toList();
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            map.forEach((key, item) -> result.put(key.toString(), resolved(item, config)));
+            return result;
+        }
+        return value;
     }
     private static void copy(Map<String, Object> source, Map<String, Object> target, String from, String to) {
         Object value = source.get(from);

@@ -41,14 +41,28 @@ public final class PaperLifecycleManager implements AutoCloseable {
             }
             if (start != null || stop != null) {
                 Object bean = context.getBean(name);
-                int phase = start == null ? 0 : start.getAnnotation(PaperStart.class).phase();
-                pending.add(new Hook(name, bean, invocable(start, bean), invocable(stop, bean), phase));
+                int phase = start == null ? 0 : phase(context, start.getAnnotation(PaperStart.class).phase(),
+                        start.getAnnotation(PaperStart.class).phaseString(), 0);
+                int stopPhase = stop == null ? Integer.MIN_VALUE : phase(context, stop.getAnnotation(PaperStop.class).phase(),
+                        stop.getAnnotation(PaperStop.class).phaseString(), Integer.MIN_VALUE);
+                pending.add(new Hook(name, bean, invocable(start, bean), invocable(stop, bean), phase,
+                        stopPhase == Integer.MIN_VALUE ? phase : stopPhase));
             }
         });
         pending.sort(Comparator.comparingInt(Hook::phase).thenComparing(Hook::name));
     }
+    private static int phase(ApplicationContext context, int declared, String expression, int defaultPhase) {
+        if (expression.isBlank()) return declared;
+        if (declared != defaultPhase) throw new IllegalArgumentException("Use phase or phaseString, not both");
+        String resolved = context.getEnvironment().resolveRequiredPlaceholders(expression);
+        try { return Integer.parseInt(resolved); }
+        catch (NumberFormatException failure) { throw new IllegalArgumentException("Lifecycle phase must resolve to an integer: " + expression, failure); }
+    }
     private static Method invocable(Method method, Object bean) {
-        return method == null ? null : AopUtils.selectInvocableMethod(method, bean.getClass());
+        if (method == null) return null;
+        Method selected = AopUtils.selectInvocableMethod(method, bean.getClass());
+        ReflectionUtils.makeAccessible(selected);
+        return selected;
     }
     private static Method validate(Method method) {
         if (!Modifier.isPublic(method.getModifiers()) || Modifier.isStatic(method.getModifiers())
@@ -69,7 +83,11 @@ public final class PaperLifecycleManager implements AutoCloseable {
         if (closed) return;
         closed = true;
         RuntimeException failure = null;
-        for (Hook hook : started.reversed()) {
+        // 기존 소비자의 producer 정리 뒤 기록 flush는 시작 순서의 단순 역순과 다를 수 있다.
+        // 명시한 종료 phase만 우선하고, 같은 phase에서는 실제 시작 시도 순서의 역순을 유지한다.
+        var shutdown = new ArrayList<>(started.reversed());
+        shutdown.sort(Comparator.comparingInt(Hook::stopPhase).reversed());
+        for (Hook hook : shutdown) {
             try { invoke(hook, hook.stop); }
             catch (RuntimeException error) { if (failure == null) failure = error; else failure.addSuppressed(error); }
         }
@@ -82,5 +100,5 @@ public final class PaperLifecycleManager implements AutoCloseable {
         catch (InvocationTargetException error) { throw new IllegalStateException("Lifecycle hook failed: " + hook.name, error.getCause()); }
         catch (ReflectiveOperationException error) { throw new IllegalStateException("Lifecycle hook is not invocable: " + hook.name, error); }
     }
-    private record Hook(String name, Object bean, Method start, Method stop, int phase) {}
+    private record Hook(String name, Object bean, Method start, Method stop, int phase, int stopPhase) {}
 }
