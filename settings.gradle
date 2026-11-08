@@ -2,3 +2,4 @@ pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }
 rootProject.name = 'spring-paper'
 include 'spring-paper-config', 'spring-paper-core', 'spring-paper-data-jpa'
 include 'spring-paper-cache', 'spring-paper-security', 'spring-paper-gradle-plugin'
+include 'spring-paper-security-core'

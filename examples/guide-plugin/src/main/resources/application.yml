@@ -36,3 +36,5 @@ spring:
       spec: 'maximumSize=100,expireAfterWrite=1m'
     security:
       enabled: true
+      connection:
+        enabled: true

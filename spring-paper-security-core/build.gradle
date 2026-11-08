@@ -1,0 +1,7 @@
+dependencies {
+    api project(':spring-paper-config')
+    api 'org.springframework:spring-context'
+    api platform("org.springframework.security:spring-security-bom:${rootProject.springSecurityVersion}")
+    api 'org.springframework.security:spring-security-core'
+    api 'org.springframework.security:spring-security-config'
+}

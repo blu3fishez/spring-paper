@@ -78,11 +78,23 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 
 ## Security
 
-`spring.paper.security.enabled: true`로 메서드 인가와 입력 문맥을 켠다. 선택적으로 `spring.paper.security.denied-message`를 설정한다.
+`spring.paper.security.enabled: true`로 메서드 인가와 확장형 인증 기반을 켠다. 선택적으로 `spring.paper.security.denied-message`를 설정한다. 전체 SPI와 소비 예제는 [Spring Paper Security](security.md)에 있다.
 
-동기 호출에서 true인 effective permission이 그대로 authority가 된다. OP는 ROLE_OPERATOR, 콘솔은 ROLE_CONSOLE을 추가한다. principal은 Player UUID/이름의 PaperPrincipal이다. 예: `@PreAuthorize("hasAuthority('myplugin.admin')")`.
+플랫폼 메서드 인가 모드의 기본 resolver는 동기 호출의 true effective permission을 authority로 쓰고 OP에 ROLE_OPERATOR, 콘솔에 ROLE_CONSOLE을 추가한다. 이 PaperPrincipal은 플랫폼이 식별한 호출자이며 별도 계정 검증을 마쳤다는 증거가 아니다.
 
-비동기 이벤트는 자동 caller 권한을 읽지 않는다. 플레이어를 식별하지 못하는 이벤트는 빈 문맥으로 호출한다. 필요한 경우 `PaperInvocationInterceptor` SPI로 불변 호출자 문맥을 전달한다. 작업자에 전달한 문맥은 이후 세션/권한 변경을 자동 재검증하지 않는다.
+접속 모드는 `spring.paper.security.connection.enabled: true`로 켠다(기본 false). 기본 Paper 어댑터와 세션 resolver를 연결하며, PENDING 상태의 부분 인증은 메서드 인가에 노출하지 않는다. 검증을 수행하는 소비자 필터/Provider가 없으면 접속은 거절된다. 기존 접속자를 자동 인증하지 않고 재접속을 요구하므로, 자체 복원 정책이 있으면 어댑터를 끄고 소비자 구현을 연결한다.
+
+| 키 (`spring.paper.security.` 다음) | 기본값 / 의미 |
+|---|---|
+| pending-timeout-seconds | 120, 최초 대기 만료 시간. 재시도해도 늘어나지 않음 |
+| operation-timeout-seconds | 10, 저장소·필터·결과 처리를 포함한 단일 인증 작업 제한 |
+| shutdown-timeout-seconds | 5, 종료 정리 확인 제한 |
+| connection.enabled | false, Paper 기본 접속 어댑터 활성화 |
+| connection.admission-timeout-seconds | 10, Paper 비동기 입장 이벤트의 최대 대기 |
+| connection.refresh-period-ticks | 20, 권위 저장소 재조회 주기 |
+| connection.snapshot-ttl-seconds | 5, 재조회가 멈췄을 때 기존 인증 snapshot을 쓸 수 있는 최대 시간 |
+
+비동기 이벤트의 기본 플랫폼 resolver는 Player 권한을 읽지 않는다. 세션 resolver는 변경 불가능한 접속 snapshot만 사용하므로 비동기 호출도 처리할 수 있다. 소비자 `PaperAuthenticationResolver`는 I/O 없이 현재 호출자의 인증을 반환한다. 작업자에 전달한 문맥은 이후 세션/권한 변경을 자동 재검증하지 않는다.
 
 ## 라이브러리 확장
 

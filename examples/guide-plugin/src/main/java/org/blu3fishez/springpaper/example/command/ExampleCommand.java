@@ -6,6 +6,7 @@ import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.example.listener.ExampleListener;
 import org.blu3fishez.springpaper.example.service.NoteService;
 import org.blu3fishez.springpaper.example.service.OperatorService;
+import org.blu3fishez.springpaper.example.security.service.ExampleConnectionVerificationService;
 import org.blu3fishez.springpaper.task.PaperTasks;
 import org.bukkit.command.*;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -18,22 +19,26 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
     private final NoteService notes;
     private final OperatorService operators;
     private final ExampleListener listener;
+    private final ExampleConnectionVerificationService connectionSecurity;
 
     public ExampleCommand(JavaPlugin plugin, PaperTasks tasks, NoteService notes,
-                          OperatorService operators, ExampleListener listener) {
+                          OperatorService operators, ExampleListener listener, ExampleConnectionVerificationService connectionSecurity) {
         this.plugin = plugin; this.tasks = tasks; this.notes = notes;
         this.operators = operators; this.listener = listener;
+        this.connectionSecurity = connectionSecurity;
     }
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String authorized = operators.verifyConsole();
         tasks.async(() -> {
             notes.ensureNote(1, "committed-value");
             String first = notes.read(1);
+            int loadsAfterFirst = notes.reads();
             String second = notes.read(1);
-            if (!first.equals("committed-value") || !first.equals(second) || notes.reads() != 1) {
+            // 캐시 TTL 만료 뒤의 정상 재조회도 허용한다. 누적 횟수 대신 연속 두 번째 조회의 적중을 검사한다.
+            if (!first.equals("committed-value") || !first.equals(second) || notes.reads() != loadsAfterFirst) {
                 throw new IllegalStateException("JPA/cache verification failed");
             }
-            return authorized;
+            return authorized + "\n" + connectionSecurity.verify().toCompletableFuture().join();
         }).whenComplete((result, error) -> tasks.main(() -> {
             if (error != null) throw new IllegalStateException("Spring Paper smoke failed", error);
             if (listener.signals() != 1) throw new IllegalStateException("Paper event verification failed");

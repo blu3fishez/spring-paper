@@ -1,14 +1,11 @@
 package org.blu3fishez.springpaper.security;
 
-import org.blu3fishez.springpaper.config.PaperConfiguration;
-import org.springframework.context.annotation.Bean;
+import org.blu3fishez.springpaper.security.connection.config.PaperConnectionSecurityConfiguration;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 
 @Configuration(proxyBeanMethods = false)
 @EnableMethodSecurity
-public class SecurityConfiguration {
-    @Bean public PaperSecurityInterceptor paperSecurityInterceptor(PaperConfiguration configuration) {
-        return new PaperSecurityInterceptor(configuration.text("spring.paper.security.denied-message", "You do not have permission to do that."));
-    }
-}
+@Import({PaperConnectionSecurityConfiguration.class, PaperSecurityDefaults.class})
+public class SecurityConfiguration {}

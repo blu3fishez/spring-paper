@@ -13,7 +13,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 /** Explicit worker/main-thread transitions; the consumer still validates player/session revisions. */
-public final class PaperTasks implements AutoCloseable {
+public final class PaperTasks implements java.util.concurrent.Executor, AutoCloseable {
     private final JavaPlugin plugin;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final int shutdownSeconds;
@@ -28,13 +28,18 @@ public final class PaperTasks implements AutoCloseable {
     }
     public <T> CompletableFuture<T> async(Supplier<T> action) {
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Spring Paper is stopping"));
-        try { return CompletableFuture.supplyAsync(() -> {
+        try { return CompletableFuture.supplyAsync(action, this); }
+        catch (RejectedExecutionException stopped) { return CompletableFuture.failedFuture(stopped); }
+    }
+    /** Standard executor bridge so integrations reuse the existing plugin-owned workers. */
+    @Override public void execute(Runnable action) {
+        if (closed) throw new RejectedExecutionException("Spring Paper is stopping");
+        workers.execute(() -> {
             Thread thread = Thread.currentThread();
             ClassLoader previous = thread.getContextClassLoader();
             thread.setContextClassLoader(plugin.getClass().getClassLoader());
-            try { return action.get(); } finally { thread.setContextClassLoader(previous); }
-        }, workers); }
-        catch (RejectedExecutionException stopped) { return CompletableFuture.failedFuture(stopped); }
+            try { action.run(); } finally { thread.setContextClassLoader(previous); }
+        });
     }
     public CompletableFuture<Void> main(Runnable action) {
         CompletableFuture<Void> result = new CompletableFuture<>();

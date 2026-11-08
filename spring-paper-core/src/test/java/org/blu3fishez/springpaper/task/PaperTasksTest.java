@@ -17,6 +17,23 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.core.env.StandardEnvironment;
 
 class PaperTasksTest {
+    @Test void standardExecutorReusesPluginWorkerContextAndRejectsAfterStop() throws Exception {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        var previous = Thread.currentThread().getContextClassLoader();
+        var foreign = new ClassLoader(null) {};
+        PaperTasks tasks = new PaperTasks(plugin, new PaperConfiguration(new StandardEnvironment()));
+        try {
+            Thread.currentThread().setContextClassLoader(foreign);
+            var loader = CompletableFuture.supplyAsync(() -> Thread.currentThread().getContextClassLoader(), tasks);
+            assertSame(plugin.getClass().getClassLoader(), loader.get(5, TimeUnit.SECONDS));
+            assertSame(foreign, Thread.currentThread().getContextClassLoader());
+            tasks.close();
+            assertThrows(java.util.concurrent.RejectedExecutionException.class, () -> tasks.execute(() -> fail("must not run")));
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+            tasks.close();
+        }
+    }
     @Test void waitsForRunningWorkAndRejectsNewWorkDuringShutdown() throws Exception {
         JavaPlugin plugin = mock(JavaPlugin.class);
         PaperTasks tasks = new PaperTasks(plugin, new PaperConfiguration(new StandardEnvironment()));

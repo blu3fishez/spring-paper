@@ -48,4 +48,4 @@ CacheManager와 Security는 명확한 조회·인가 사용 사례부터 연결�
 4. 검증계에서 역할·인증 모드별 기동, 명령·이벤트·반복 작업, DB/Redis 장애·오래된 세션 callback·부분 시작 실패·종료 flush를 확인한다.
 5. 실제 클라이언트 동작·MSPT·쿼리/풀/잠금 대기 측정과 rollback 절차를 기록한다.
 
-Velocity는 Paper 전용 Spring Paper를 적용하지 않고 기존 SIMEXT-90의 Spring 전환 범위로 별도 설계한다. 이 문서가 그 구현 선택을 확정하거나 새로운 프로세스·플러그인 분리를 승인하는 것은 아니다.
+Velocity에는 Paper bootstrap/core를 적용하지 않는다. Spring Paper Security의 호스트 중립 security-core는 소비자의 Velocity 어댑터에서 선택적으로 호출할 수 있다. 기존 auth의 FastLogin·테스트 계정 규칙과 저장소는 소비자 구현으로 연결하며 프레임워크에 고정하지 않는다. 실제 SimpleExtraction 적용, Java 25 runtime 확인과 프록시 접속 검증은 SIMEXT-90의 후속 도입 단계다. 새 프로세스·플러그인 분리나 배포를 이 문서에서 확정하지 않는다.

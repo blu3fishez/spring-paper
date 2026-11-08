@@ -107,13 +107,16 @@ spring:
 |---|---|---|
 | `spring-paper-data-jpa` | Spring Data JPA 저장소, Hibernate, 트랜잭션, Hikari 기본 구성, 기존 자원 재사용 | `spring.paper.jpa.enabled` |
 | `spring-paper-cache` | Spring Cache, Caffeine 기본 제공자, 커밋 뒤 캐시 변경, 기존 CacheManager 재사용 | `spring.paper.cache.enabled` |
-| `spring-paper-security` | 메서드 인가, 호출별 Paper 사용자·권한 문맥, 거절 처리와 문맥 복원 | `spring.paper.security.enabled` |
+| `spring-paper-security` | 메서드 인가, 소비자 교체형 인증 문맥·거절 처리, 선택형 Paper 접속 어댑터 | `spring.paper.security.enabled` |
+| `spring-paper-security-core` | 호스트 중립 인증 필터·세션·대기·결과 처리, Spring AuthenticationManager/Provider 연동 | Paper Security가 자동 import; 단독 소비는 `@Import(PaperConnectionSecurityConfiguration.class)` |
 
 모듈 JAR 추가와 YAML enabled가 모두 필요하다. 비활성 모듈은 컨텍스트에 구성되지 않는다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
 
 `@Transactional` 서비스는 `PaperTasks.async`에서 호출한다. 기본 JPA 트랜잭션 매니저는 Paper 메인 스레드의 트랜잭션 시작을 거절한다. 작업 결과를 메인 스레드에 반영할 때 플레이어 세션·원정·revision 재검증은 사용하는 게임의 책임이다.
 
-Security는 기존 플랫폼 인증을 대체하지 않는다. 동기 명령·플레이어 이벤트 호출마다 권한을 캡처하고 finally에서 이전 문맥을 복원한다. 작업자 전환에는 Spring Security의 `DelegatingSecurityContextRunnable/Callable` 등 명시적 전달을 사용한다. 비동기 이벤트에서 변경 가능한 Player 권한을 읽지 않으며 자동 인증 문맥도 부여하지 않는다.
+Security는 호출마다 인증 문맥을 설정하고 finally에서 이전 문맥을 복원한다. 기본 플랫폼 모드는 비동기 이벤트에서 Player 권한을 읽지 않으며, 접속 모드는 검증한 불변 세션 snapshot을 사용할 수 있다. 작업자 전환에는 Spring Security의 `DelegatingSecurityContextRunnable/Callable` 등 명시적 전달을 사용한다. 인증 체인 자체는 Authentication을 값으로 전달한다.
+
+접속 인증은 [Spring Paper Security 확장 계약](docs/security.md)을 따른다. 소비자가 AuthenticationManager/Provider·필터 체인·세션 저장소·대기 처리기·결과 처리기·호출 인증 resolver를 빈으로 제공하면 각 기본 구현이 타입 기준으로 물러난다. 인증 대기의 의미와 UI는 소비자가 정한다. Paper 기본 접속 어댑터는 `spring.paper.security.connection.enabled: true`로 켜고, 자체 Paper/Velocity 어댑터는 호스트 타입이 없는 security-core를 호출한다.
 
 ## 로컬 빌드·예제
 
@@ -128,6 +131,6 @@ Security는 기존 플랫폼 인증을 대체하지 않는다. 동기 명령·�
 
 예제는 included build로 이 저장소의 라이브러리와 Gradle 플러그인을 사용한다. `runServer`는 지정한 Paper 빌드를 다운로드하고 예제 Shadow JAR을 연결한다. EULA는 사용자가 확인한 뒤 YAML에서 명시적으로 수락한다. 기본값은 false다.
 
-예제 플러그인은 실제 Paper 커스텀 이벤트·콘솔 명령·JPA 저장/조회·캐시·메서드 인가를 검사하고 `SPRING_PAPER_SMOKE_OK` 및 plugins/SpringPaperExample/smoke-success.txt를 남긴다. 종료 훅은 smoke-stop.txt를 남긴다. 예제는 자동 검증용이며 실제 플레이어 기능이나 클라이언트 검증을 대신하지 않는다.
+예제 플러그인은 실제 Paper 커스텀 이벤트·콘솔 명령·JPA 저장/조회·캐시·메서드 인가와 소비자 Provider의 인증 대기·추가 증거·완료·정리를 검사하고 `SPRING_PAPER_SMOKE_OK` 및 plugins/SpringPaperExample/smoke-success.txt를 남긴다. 종료 훅은 smoke-stop.txt를 남긴다. 인증 증거는 합성 검증용이며 실제 Minecraft/Discord 인증기나 클라이언트 검증을 대신하지 않는다.
 
 이 초기 라이브러리는 SimpleExtraction 도입 준비물이다. SimpleExtraction의 실제 Guice 제거·역할별 마이그레이션과 검증계 배포는 별도 후속 작업이며, 기존 프로젝트를 변경하지 않았다.
