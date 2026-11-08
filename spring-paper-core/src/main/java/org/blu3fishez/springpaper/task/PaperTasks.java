@@ -67,6 +67,8 @@ public final class PaperTasks implements AutoCloseable {
     @Override public void close() {
         if (closed) return;
         closed = true;
+        // 메인 스레드가 이 close에서 워커를 기다리는 동안 queued main callback은 실행될 수 없다.
+        // future를 미리 실패시켜 워커가 해당 callback 완료를 무한 대기하지 않게 한다.
         pendingMain.forEach(future -> future.completeExceptionally(new IllegalStateException("Spring Paper is stopping")));
         workers.shutdown();
         try {

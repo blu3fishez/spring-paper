@@ -52,6 +52,8 @@ def main():
     source += "\nrepositories { maven { url = uri(" + repository_uri + ") } }\n"
     (project / "build.gradle").write_text(source)
 
+    # 같은 SNAPSHOT의 Gradle 캐시가 남으면 방금 수정한 라이브러리 대신 이전 배포물을 검증할 수 있다.
+    # 최초 소비는 refresh하고, 아래에서 모든 자체 클래스의 bytecode까지 현재 배포물과 비교한다.
     gradle(["-p", str(project), "build", "--refresh-dependencies"], BUILD / "published-consumer-first-build.log")
     second = gradle(["-p", str(project), "build"], BUILD / "published-consumer-second-build.log")
     if "Reusing configuration cache." not in second:

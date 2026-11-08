@@ -90,6 +90,16 @@ class ApplicationLifecycleTest {
             rejectedDuringClose = tasks.async(() -> "must-not-start-during-resource-close").isCompletedExceptionally();
         }
     }
+    @SpringPaperPluginApplication(name = "ExplicitDestruction", configurations = ExplicitDestructionFeatures.class)
+    public static class ExplicitDestructionHost extends JavaPlugin {}
+    @Configuration(proxyBeanMethods = false)
+    public static class ExplicitDestructionFeatures {
+        @Bean(destroyMethod = "destroy") public ExplicitDestruction hooks() { return new ExplicitDestruction(); }
+    }
+    public static class ExplicitDestruction {
+        @PaperStop public void stop() { actions.add("owned-stop"); }
+        public void destroy() { actions.add("duplicate-destroy"); }
+    }
 
     private <T extends JavaPlugin> T host(Class<T> type) {
         mainThread = Thread.currentThread();
@@ -150,5 +160,12 @@ class ApplicationLifecycleTest {
         Infrastructure infrastructure = application.context().getBean(Infrastructure.class);
         application.close();
         assertTrue(infrastructure.rejectedDuringClose, "infrastructure must not close while workers accept new work");
+    }
+    @Test void paperStopOwnsExplicitDestructionMetadataAsWellAsInferredClose() {
+        actions.clear();
+        try (var application = SpringPaperApplication.run(host(ExplicitDestructionHost.class))) {
+            assertEquals(List.of(), actions);
+        }
+        assertEquals(List.of("owned-stop"), actions);
     }
 }

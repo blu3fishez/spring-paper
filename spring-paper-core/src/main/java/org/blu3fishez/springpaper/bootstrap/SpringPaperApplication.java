@@ -52,7 +52,9 @@ public final class SpringPaperApplication implements AutoCloseable {
         SpringPaperPluginApplication annotation = plugin.getClass().getAnnotation(SpringPaperPluginApplication.class);
         if (annotation == null) throw new IllegalArgumentException("Plugin requires @SpringPaperPluginApplication");
         ClassLoader loader = plugin.getClass().getClassLoader();
+        // 클래스 정의와 리소스 탐색은 다른 책임이다. PaperResourceLoader의 실제 기동 실패 기록 참고.
         context.setClassLoader(loader);
+        context.setResourceLoader(new PaperResourceLoader(loader, JavaPlugin.class.getClassLoader()));
         context.setAllowBeanDefinitionOverriding(false);
         context.setEnvironment(PaperEnvironment.load(plugin, annotation.configuration()));
         PaperConfiguration configuration = new PaperConfiguration(context.getEnvironment());
@@ -87,7 +89,9 @@ public final class SpringPaperApplication implements AutoCloseable {
         ServiceLoader.load(SpringPaperModule.class, loader).forEach(module -> {
             if (configuration.enabled(module.enabledProperty())) context.register(module.configurationClass());
         });
-        // Existing startup semantics: worker preparation completes before gameplay inputs open.
+        // 컨텍스트 refresh는 DB 연결/스키마 검사를 포함한다. 작업자에서 준비하되 완료를 기다린다.
+        // 기다리지 않고 onEnable을 반환하면 미완성 컨텍스트로 이벤트가 들어오는 시작 경쟁이 생긴다.
+        // Spring의 PostConstruct/SmartLifecycle은 이 작업자에서 호출되므로 Paper 변경은 아래 훅에서 한다.
         try (var preparation = Executors.newVirtualThreadPerTaskExecutor()) {
             preparation.submit(() -> withLoader(loader, context::refresh)).get();
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw error; }
@@ -124,7 +128,9 @@ public final class SpringPaperApplication implements AutoCloseable {
         Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
         RuntimeException failure = null;
         try {
-            // Do not create a resource during failed-start cleanup. Spring remains the fallback owner.
+            // 회귀 검증에서 Spring의 기본 destruction 순서만으로는 진행 중인 작업보다 DB가 먼저 닫힐 수 있었다.
+            // 입력 차단 → 사용자 flush → 워커 drain → Spring 인프라 destruction 순서를 직접 보장한다.
+            // 부분 시작 실패의 정리에서는 getBean으로 새 자원을 만들지 않고 이미 생성된 singleton만 조회한다.
             AutoCloseable workers = context.getBeanFactory().getSingleton(PaperCoreConfiguration.WORKERS_BEAN_NAME)
                     instanceof PaperTasks tasks ? tasks : null;
             for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, workers, context }) {

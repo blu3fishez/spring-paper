@@ -17,6 +17,8 @@ public final class PaperInvocationService {
     public Object invoke(PaperInvocation input, PaperInvocationInterceptor.Invocation action) throws Exception {
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
+        // Paper의 공유 이벤트/명령 스레드는 plugin TCCL을 보장하지 않는다.
+        // Spring/JPA의 지연 클래스·SPI 탐색을 이 플러그인에 한정하고 finally에서 다음 호출자를 위해 복원한다.
         if (classLoader != null) thread.setContextClassLoader(classLoader);
         try { return invoke(0, input, action); }
         finally { if (classLoader != null) thread.setContextClassLoader(previous); }

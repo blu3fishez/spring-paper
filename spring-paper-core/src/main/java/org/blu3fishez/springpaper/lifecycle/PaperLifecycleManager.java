@@ -27,6 +27,8 @@ public final class PaperLifecycleManager implements AutoCloseable {
                 if (method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class)) validate(method);
             }
             for (Method method : type.getMethods()) {
+                // 부모 선언을 별도로 실행하면 override가 중복 호출되고, 자식이 제거한 어노테이션도 살아난다.
+                // listener와 동일하게 public override 결과만 훅으로 채택한다.
                 if (method.isBridge() || method.isSynthetic()) continue;
                 if (method.isAnnotationPresent(PaperStart.class)) {
                     if (start != null) throw new IllegalArgumentException(name + ": only one PaperStart is allowed");
@@ -57,6 +59,7 @@ public final class PaperLifecycleManager implements AutoCloseable {
     }
     public void start() {
         for (Hook hook : pending) {
+            // start 내부에서 일부 자원을 얻은 뒤 실패해도 stop이 필요하므로 호출 전에 정리 대상으로 기록한다.
             started.add(hook);
             invoke(hook, hook.start);
         }

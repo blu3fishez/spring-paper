@@ -13,7 +13,11 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Opcodes;
 
-/** Reads metadata without loading a JavaPlugin or any server class into Gradle. */
+/**
+ * Reads metadata without loading a JavaPlugin or any server class into Gradle.
+ * Paper 타입을 reflection으로 로딩하면 compileOnly 호스트 클래스와 런타임 의존성까지 Gradle에 요구하게 된다.
+ * 어노테이션의 문자열 메타데이터만 ASM으로 읽어 빌드와 서버의 클래스 로더 책임을 분리한다.
+ */
 final class PluginMetadataReader {
     private static final String PREFIX = "Lorg/blu3fishez/springpaper/annotation/";
     final Map<String, Map<String, Object>> applications = new LinkedHashMap<>();

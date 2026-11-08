@@ -46,11 +46,14 @@ public final class PaperListenerRegistrar implements AutoCloseable {
         }
         Listener token = new Listener() {};
         registrations.add(token);
-        // Java's public method view resolves overrides; walking every declaration registers both.
+        // 회귀 검증: 모든 선언을 순회해 등록하면 부모/자식 override가 둘 다 등록되었다.
+        // 선언 순회는 잘못된 시그니처 검증에만 쓰고, 실행 대상은 Java override가 반영된 public 메서드로 고른다.
         for (Method method : type.getMethods()) {
             EventHandler handler = method.getAnnotation(EventHandler.class);
             if (handler == null || method.isBridge() || method.isSynthetic()) continue;
             Method invocable;
+            // 원본 target을 꺼내 호출하면 Security/Transactional 등 Spring advice를 우회한다.
+            // EventListenerMethodProcessor와 같은 selectInvocableMethod 계약으로 프록시에 노출된 메서드만 호출한다.
             try { invocable = AopUtils.selectInvocableMethod(method, bean.getClass()); }
             catch (IllegalStateException error) {
                 throw new IllegalArgumentException(name + ": event method is hidden by a JDK proxy; move advice to a service or expose an invocable interface", error);

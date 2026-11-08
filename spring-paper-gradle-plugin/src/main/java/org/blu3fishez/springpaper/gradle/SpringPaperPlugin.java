@@ -26,6 +26,8 @@ public final class SpringPaperPlugin implements Plugin<Project> {
         extension.getConfigurationFile().convention(project.getLayout().getProjectDirectory().file(
                 project.getProviders().gradleProperty("springPaper.configuration").getOrElse("src/main/resources/application.yml")));
         var yamlText = project.getProviders().fileContents(extension.getConfigurationFile()).getAsText();
+        // 실제 소비 빌드에서 afterEvaluate로 toolchain을 늦게 바꾸면 languageVersion이 이미 finalized라 실패했다.
+        // Shadow/run-paper 적용 전에 Provider를 연결한다. YAML 파일 선택은 확장 속성으로 계속 변경 가능하다.
         project.getExtensions().getByType(JavaPluginExtension.class).getToolchain().getLanguageVersion().set(
                 yamlText.map(text -> JavaLanguageVersion.of(PaperConfiguration.of(YamlDocument.read(new ByteArrayInputStream(
                         text.getBytes(StandardCharsets.UTF_8)))).integer("spring.paper.minecraft.java-version", 25))));
@@ -46,6 +48,8 @@ public final class SpringPaperPlugin implements Plugin<Project> {
         project.getTasks().named("shadowJar", ShadowJar.class).configure(task -> {
             task.getArchiveClassifier().set("");
             task.mergeServiceFiles();
+            // Shadow의 중복 제외가 transformer보다 먼저 적용되면 선택 모듈의 ServiceLoader 제공자가 사라진다.
+            // 서비스 파일은 병합 단계까지 전달한다. Kotlin metadata도 같은 이름이 나타나므로 별도로 보존한다.
             task.filesMatching("META-INF/services/**", details -> details.setDuplicatesStrategy(DuplicatesStrategy.INCLUDE));
             task.filesMatching("META-INF/*.kotlin_module", details -> details.setDuplicatesStrategy(DuplicatesStrategy.INCLUDE));
             task.exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/INDEX.LIST");

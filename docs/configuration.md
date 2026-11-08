@@ -92,7 +92,25 @@ PaperInvocationInterceptor SPI는 코어의 이벤트·명령·탭 완성 경로
 
 컨텍스트 준비, 사용자 start/stop, 입력 호출과 PaperTasks 작업은 플러그인의 문맥 클래스 로더를 사용하고 이전 로더를 복원한다. 다른 플러그인의 컨텍스트나 전역 정적 컨텍스트를 재사용하지 않는다.
 
+빈과 프록시의 클래스 정의에는 Paper의 원래 플러그인 클래스 로더를 쓴다. 리소스 조회에만 PaperResourceLoader를 연결해 플러그인 → 서버 순서로 메타데이터를 찾는다. 실제 Paper의 로더는 서버 클래스를 로딩할 수 있어도 같은 클래스의 리소스를 노출하지 않아 Spring의 인터페이스 분석이 실패했다. ResourceLoader 보완으로 처리하며 Paper API를 플러그인에 복제하지 않는다.
+
 Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 한다. lazy/prototype이면 조용히 누락시키지 않고 시작 오류로 알린다. 비활성 서버 역할·인증 모드는 조건부 설정에서 제외한다. 일반 서비스와 지연 자원은 해당 조건 안에서 기존 지연 초기화를 유지할 수 있다. 코어가 제공하는 paperPlugin/paperServer/paperLogger/paperConfiguration/paperServerInfo/paperThreadAccess 이름은 재정의하지 않는다.
+
+## Spring 내부 구현에서 확인한 확장 계약
+
+아래 링크는 사용 중인 Framework 7.0.10과 Security 7.1.2 소스다. 컨테이너·프록시·트랜잭션·캐시를 별도로 재구현하지 않고 공개 확장 지점에 Paper 책임을 연결한다.
+
+| 확인한 Spring 구현 | Spring Paper에서 사용하는 계약 |
+|---|---|
+| [GenericApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/GenericApplicationContext.java), [ConfigurationClassPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/ConfigurationClassPostProcessor.java) | 컨텍스트의 클래스 로더와 ResourceLoader를 분리한다. 구성 파서는 제공한 ResourceLoader로 메타데이터를 읽는다. 리소스 탐색은 PaperResourceLoader만 소유한다. |
+| [InitDestroyAnnotationBeanPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/annotation/InitDestroyAnnotationBeanPostProcessor.java), [MergedBeanDefinitionPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/MergedBeanDefinitionPostProcessor.java), [DisposableBeanAdapter](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/DisposableBeanAdapter.java) | PaperBeanCatalog는 merged metadata에서 후보와 외부 종료 소유권만 기록한다. 기반 definition 속성을 수정하거나 Paper 입력을 등록하지 않는다. PaperStop이 소유한 종료는 Spring이 다시 호출하지 않는다. |
+| [EventListenerMethodProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/EventListenerMethodProcessor.java) | 동일한 AopUtils.selectInvocableMethod 계약으로 관리 빈의 프록시를 호출한다. 메타데이터를 발견한 뒤 실제 입력을 여는 책임은 PaperListenerRegistrar/PaperCommandRegistrar가 맡는다. |
+| [AbstractApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java) | refresh 실패의 singleton 정리와 컨텍스트 destruction은 Spring이 소유한다. 메인 스레드 사용자 훅과 입력 해제·워커 drain 순서만 SpringPaperApplication이 그 바깥에서 조정한다. |
+| [AbstractPlatformTransactionManager](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java) | beforeBegin이 doBegin보다 먼저 실행되는 공식 listener로 메인 스레드 DB 작업을 차단한다. 트랜잭션 구현은 JpaTransactionManager에 위임한다. |
+| [TransactionAwareCacheDecorator](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context-support/src/main/java/org/springframework/cache/transaction/TransactionAwareCacheDecorator.java) | put/evict/clear의 afterCommit 반영을 Spring에 위임한다. 자체 트랜잭션 캐시 동기화기를 만들지 않는다. |
+| [AuthorizationManagerBeforeMethodInterceptor](https://github.com/spring-projects/spring-security/blob/7.1.2/core/src/main/java/org/springframework/security/authorization/method/AuthorizationManagerBeforeMethodInterceptor.java), [DelegatingSecurityContextRunnable](https://github.com/spring-projects/spring-security/blob/7.1.2/core/src/main/java/org/springframework/security/concurrent/DelegatingSecurityContextRunnable.java) | 메서드 인가는 Spring Security가 처리한다. Paper 어댑터는 호출별 불변 사용자 정보와 finally 문맥 복원만 담당하며 작업자 문맥 전달은 Spring의 명시적 wrapper에 맡긴다. |
+
+실제 장애·회귀·실행 승인 대기 이력과 관련 소스 위치는 [검증 기록](verification.md#막혔던-지점과-코드-주석)에서 확인할 수 있다.
 
 ## 라이브러리 조합
 

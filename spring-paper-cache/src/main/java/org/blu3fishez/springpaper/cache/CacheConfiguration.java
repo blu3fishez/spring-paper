@@ -25,6 +25,8 @@ public class CacheConfiguration {
                         CaffeineCacheManager manager = new CaffeineCacheManager(names.toArray(String[]::new));
                         manager.setCacheSpecification(spec);
                         manager.setAllowNullValues(false);
+                        // 직접 put/evict 시점을 재구현하면 rollback된 값이 캐시에 남을 수 있다.
+                        // Spring의 TransactionAwareCacheDecorator가 afterCommit에 반영하도록 위임한다.
                         return new TransactionAwareCacheManagerProxy(manager);
                     }));
         };

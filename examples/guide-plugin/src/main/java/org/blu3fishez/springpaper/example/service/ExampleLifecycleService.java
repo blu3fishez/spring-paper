@@ -10,7 +10,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 @Service
-public final class ExampleLifecycleService {
+public final class ExampleLifecycleService implements AutoCloseable {
     private final JavaPlugin plugin;
     public ExampleLifecycleService(JavaPlugin plugin) { this.plugin = plugin; }
     @PaperStart public void start() { plugin.getLogger().info("SPRING_PAPER_CUSTOM_START"); }
@@ -20,7 +20,8 @@ public final class ExampleLifecycleService {
             plugin.getServer().dispatchCommand(plugin.getServer().getConsoleSender(), "springpaper");
         });
     }
-    @PaperStop public void stop() {
+    // AutoCloseable의 Spring 추론 종료와 겹쳐도 PaperStop 소유자가 한 번만 실행되어야 한다.
+    @Override @PaperStop public void close() {
         try {
             Files.createDirectories(plugin.getDataFolder().toPath());
             Files.writeString(plugin.getDataFolder().toPath().resolve("smoke-stop.txt"), "custom-stop\n");

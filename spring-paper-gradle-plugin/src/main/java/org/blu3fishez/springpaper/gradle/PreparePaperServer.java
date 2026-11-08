@@ -27,6 +27,8 @@ public abstract class PreparePaperServer extends DefaultTask {
         try (var writer = Files.newBufferedWriter(target)) { properties.store(writer, "Spring Paper development server"); }
         var eula = getEulaFile().get().getAsFile().toPath();
         Files.createDirectories(eula.getParent());
+        // 서버 실행 허용과 Minecraft EULA 수락은 별도 의사표시다. 수락 대기 중 실제 기동을 보류했던 지점이다.
+        // 배포 예제는 false를 유지하고, 사용자가 수락한 로컬 설정에서만 true를 전달한다. 자동 수락하지 않는다.
         Files.writeString(eula, "# https://aka.ms/MinecraftEULA\neula=" + getAcceptEula().get() + "\n");
     }
 }

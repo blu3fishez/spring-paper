@@ -10,6 +10,8 @@ Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다
 
 현재 검증 기준은 Java 25, Paper 26.3 build 244, Spring Framework 7.0.10이다. Data·Security·Hibernate 조합은 [공식 의존성 조합](https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/4.1.2/spring-boot-dependencies-4.1.2.pom)을 참고해 직접 고정했다. Boot 코드를 실행하거나 Boot starter를 추가하지 않는다.
 
+[Spring 내부 구현과 확장 지점](docs/configuration.md#spring-내부-구현에서-확인한-확장-계약)에 컨텍스트·프록시·종료·트랜잭션·캐시의 책임을 정리했다. 발생한 문제의 원인은 해당 구현 옆의 한국어 주석과 [검증 기록](docs/verification.md#막혔던-지점과-코드-주석)에 남겼다.
+
 ## 진입점
 
 ```java
@@ -68,7 +70,7 @@ public final class GuideLifecycleService {
 
 빈마다 public void 무인자 시작·종료 메서드를 하나씩 제공할 수 있다. 낮은 phase부터 시작하고, 같은 phase는 빈 이름순이다. 종료는 실제 시작 시도 순서의 역순이며 실패한 시작의 부분 정리도 호출한다. 다른 빈의 시작 완료가 필요하면 phase를 명시한다. `@DependsOn`은 Spring 빈 생성 순서이며 이 훅의 순서를 대신하지 않는다.
 
-동일 빈의 `@PaperStop`과 `@PreDestroy`/`DisposableBean`을 중복 사용하지 않는다. `@PaperStop`이 있으면 AutoCloseable의 추론 종료를 중복 실행하지 않는다. 정리는 부분 초기화와 중복 호출에 안전해야 한다.
+동일 빈의 `@PaperStop`과 `@PreDestroy`/`DisposableBean`을 중복 사용하지 않는다. `@PaperStop`이 있으면 Spring의 명시적 `@Bean(destroyMethod=...)`와 AutoCloseable 추론 종료 대신 이 훅만 실행한다. 정리는 부분 초기화와 중복 호출에 안전해야 한다.
 
 훅이 소유하는 자원은 start/ready 이후에 획득한다. 아직 시작을 시도하지 않은 훅은 종료 때 호출하지 않는다. 컨텍스트 생성 중 획득할 DB·네트워크 자원은 별도 Spring 빈으로 두고 Spring의 정상 destruction 계약으로 정리한다.
 

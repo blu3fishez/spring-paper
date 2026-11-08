@@ -66,6 +66,8 @@ public class JpaConfiguration {
                     PaperThreadAccess threads = factory.getBeanProvider(PaperThreadAccess.class).getIfAvailable();
                     if (threads != null) manager.setTransactionExecutionListeners(List.of(new TransactionExecutionListener() {
                         @Override public void beforeBegin(TransactionExecution transaction) {
+                            // Spring AbstractPlatformTransactionManager는 doBegin 앞에서 이 공식 hook을 호출한다.
+                            // DB 연결을 얻은 뒤 경고하는 방식이 아니라 메인 스레드의 I/O 시작 전에 차단한다.
                             if (threads.isPrimaryThread()) throw new IllegalStateException("JPA transactions must run on a worker; use PaperTasks.async");
                         }
                     }));
