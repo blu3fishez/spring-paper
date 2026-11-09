@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
 
+import org.blu3fishez.springpaper.internal.PaperLifecycleAnnotations;
 import java.util.Arrays;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -13,8 +14,6 @@ import java.util.concurrent.Executors;
 import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.annotation.PaperEventListener;
 import org.blu3fishez.springpaper.annotation.SpringPaperPluginApplication;
-import org.blu3fishez.springpaper.annotation.PaperStart;
-import org.blu3fishez.springpaper.annotation.PaperStop;
 import org.blu3fishez.springpaper.command.PaperCommandRegistrar;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.PaperEnvironment;
@@ -91,7 +90,7 @@ public final class SpringPaperApplication implements AutoCloseable {
                 boolean adapter = beans.findAnnotationOnBean(name, PaperEventListener.class, false) != null
                         || !AnnotatedElementUtils.getMergedRepeatableAnnotations(type, PaperCommandExecutor.class).isEmpty()
                         || Arrays.stream(org.springframework.util.ReflectionUtils.getAllDeclaredMethods(type))
-                        .anyMatch(method -> method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class));
+                        .anyMatch(method -> PaperLifecycleAnnotations.hook(method));
                 var definition = beans.getBeanDefinition(name);
                 if (adapter && (definition.isLazyInit() || !definition.isSingleton())) {
                     throw new IllegalArgumentException(name + ": Paper adapters and lifecycle hooks must be eager singletons; exclude inactive modes in configuration");

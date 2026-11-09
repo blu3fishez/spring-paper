@@ -1,13 +1,12 @@
 package org.blu3fishez.springpaper.bootstrap;
 
+import org.blu3fishez.springpaper.internal.PaperLifecycleAnnotations;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.annotation.PaperEventListener;
-import org.blu3fishez.springpaper.annotation.PaperStart;
-import org.blu3fishez.springpaper.annotation.PaperStop;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
@@ -23,16 +22,16 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
         boolean stop = false;
         boolean lifecycle = false;
         for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
-            lifecycle |= method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class);
+            lifecycle |= PaperLifecycleAnnotations.hook(method);
         }
         for (Method method : type.getMethods()) {
-            if (!method.isBridge() && !method.isSynthetic()) stop |= method.isAnnotationPresent(PaperStop.class);
+            if (!method.isBridge() && !method.isSynthetic()) stop |= PaperLifecycleAnnotations.shutdown(method);
         }
         if (stop) {
-            if (DisposableBean.class.isAssignableFrom(type)) throw new IllegalArgumentException(beanName + ": use one shutdown owner, PaperStop or DisposableBean");
+            if (DisposableBean.class.isAssignableFrom(type)) throw new IllegalArgumentException(beanName + ": use one shutdown owner, OnPaperMainThreadShutdown or DisposableBean");
             for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
                 if (Arrays.stream(method.getAnnotations()).anyMatch(a -> a.annotationType().getName().equals("jakarta.annotation.PreDestroy"))) {
-                    throw new IllegalArgumentException(beanName + ": use one shutdown owner, PaperStop or PreDestroy");
+                    throw new IllegalArgumentException(beanName + ": use one shutdown owner, OnPaperMainThreadShutdown or PreDestroy");
                 }
             }
             // 회귀 검증에서 원본 definition만 바꾸면 캐시된 merged definition의 close 추론이 남아 이중 종료됐다.

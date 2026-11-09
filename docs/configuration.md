@@ -196,7 +196,13 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 
 `@PaperCommandExecutor`는 반복 선언할 수 있다. 레이블마다 다른 usage·permission 메타데이터를 생성하며 실행 객체는 하나다. 진입점 `permissions`는 `@PaperPermission(name=..., description=..., defaultValue=...)` 배열로 명령 밖의 권한도 선언한다. 같은 권한의 충돌하는 기본값은 빌드 오류다.
 
-시작/종료 훅의 `phaseString`은 정수 또는 Environment placeholder를 받는다. 명시적인 종료 phase는 높은 값부터 적용하고 같은 값은 실제 시작 순서를 뒤집는다. 기본 종료 phase는 시작 phase를 상속한다. 시작하지 않은 훅을 종료 시 새로 만들거나 실행하지 않는다. 소비자의 `onApplicationStartupFailure`는 부분 시작 정리 이후 호출된다.
+Paper main-thread 콜백은 `OnPaperMainThreadStartup`·`OnPaperMainThreadShutdown`으로 실행 시점을 명시한다.
+숫자 속성은 없다. 일반적인 빈은 Spring lifecycle을 사용하고 필요한 Paper 작업에만 이 콜백을 둔다.
+순서가 필요한 경우 `PaperLifecycleRelation.startupBefore`/`shutdownBefore`를 표준 Bean으로 제공한다.
+표준 Spring 주입이 소유자를 선택하며, 관계 값은 소유자를 호출하거나 닫지 않는다. 두 그래프를 실행 전에 검사한다.
+시작/종료 관계는 독립적이다. 부분 실패 정리는 전체 종료 그래프의 경로를 보존한 채 실제 시도한 소유자만 닫는다.
+기존 PaperStart/PaperStop의 phase/phaseString은 호환 경로다. 명시적 관계가 숫자 정렬보다 우선한다.
+소비자의 `onApplicationStartupFailure`는 부분 시작 정리 이후 호출된다.
 
 SpringPaperModule SPI는 코어가 호출하고 선택 모듈이 구현한다. META-INF/services 등록과 enabledProperty/configurationClass를 제공하면 활성화된 모듈 구성만 컨텍스트에 들어온다. provider 생성자는 I/O와 자원 생성을 하지 않는다.
 

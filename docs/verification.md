@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew build`: 전체 빌드와 115개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew build`: 전체 빌드와 128개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,13 +15,13 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 115개, 실패·오류·스킵 0.
+총 128개, 실패·오류·스킵 0.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 7 |
 | spring-paper-config | 4 |
-| spring-paper-core | 42 |
+| spring-paper-core | 55 |
 | spring-paper-data-jpa | 6 |
 | spring-paper-data-jdbc | 4 |
 | spring-paper-data-pdc | 10 |
@@ -79,12 +79,12 @@ Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현
 서버 로그에서 확인한 결과:
 
 ```text
-14:14:05 SPRING_PAPER_CUSTOM_START
-14:14:07 SPRING_PAPER_SMOKE_OK
-14:15:13 SPRING_PAPER_SMOKE_OK  (sp 별칭)
-14:15:13 SPRING_PAPER_CUSTOM_STOP
-14:15:13 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
-14:15:13 SpringPaper - Shutdown completed.
+15:22:45 SPRING_PAPER_CUSTOM_START
+15:22:47 SPRING_PAPER_SMOKE_OK
+15:23:53 SPRING_PAPER_SMOKE_OK  (sp 별칭)
+15:23:53 SPRING_PAPER_CUSTOM_STOP
+15:23:53 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
+15:23:53 SpringPaper - Shutdown completed.
 ```
 
 smoke-success.txt:
@@ -133,13 +133,13 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 ## 배포물 소비와 최종 JAR
 
-build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 127개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
+build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 136개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 29f77de6fcca55f954865102da39667dcb546267342299c03dd09c052c7b914d
-- 크기: 40081131 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 2172f4ba0c67244e40145545838dccf78f4f35545a6c4f6385d46d959c24ee8e
+- 크기: 40094942 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), JPA·Cache·Security SPI 제공자 4개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 8feb892cf1ea6362a8ad628ee81244f559efc55b8dfe9821aeb20f4b628a2d4a
+- 독립 Maven 소비 JAR SHA-256: 0079372a5cbe52aae307fd2225280da41aff09b2f32307a001f165f17b4c9562
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계
@@ -167,3 +167,15 @@ PDC의 원인은 [PdcRecordMapper](../spring-paper-data-pdc/src/main/java/org/bl
 전역 숫자 순서와 상속 이벤트 문제는 [PaperEventPlan](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/listener/PaperEventPlan.java)의 native HandlerList 주석에 기록했다.
 
 GitHub 첫 push는 GH007(비공개 작성자 메일 보호)로 거절됐다. 공개 GitHub 계정 ID로 확인한 noreply 주소로 미게시 커밋을 고쳐 재시도했다. 이후 사용자의 명시적 요청으로 이 spring-paper 저장소의 로컬 user.email도 같은 주소로 설정했다. 전역 Git·다른 저장소·계정 설정은 변경하지 않았다.
+
+## Paper main-thread 생명주기 관계
+
+OnPaperMainThreadStartup/Shutdown 이름으로 실행 스레드와 시점을 드러낸다. 신규 표시에는 숫자 속성이 없다.
+기존 표시와 phase는 호환 경로로 유지한다. Spring 주입의 Qualifier·alias로 같은 타입의 두 소유자를 선택하고,
+시작/종료 독립 관계·기본 순서·순환 사전 거절·없는 훅/분리된 객체 거절·중복 소유자·프록시 호출·stop-only·
+부분 실패 경로와 모든 정리 시도를 검사했다. 종료 관계를 제거한 mutation이 부분 정리 순서 assertion에 잡혔다.
+네이티브 예제는 이름 정렬과 반대인 준비 관계를 사용해 probe 준비 → 사용자 시작 → 사용자 종료 → probe 정리를
+Paper 메인 스레드에서 확인한다. 사용자 정리는 JPA와 풀 종료보다 먼저다.
+
+Spring DefaultLifecycleProcessor의 빈 의존 순회와 DefaultSingletonBeanRegistry의 자원 종료 소유권을 참고했다.
+빈 생성 의존성을 Paper 준비 완료로 추론하지 않고, 실제 Paper 작업 관계만 별도로 선언한다.

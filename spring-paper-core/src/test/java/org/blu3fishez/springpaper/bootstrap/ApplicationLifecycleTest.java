@@ -33,8 +33,8 @@ class ApplicationLifecycleTest {
     }
     public record BoundSettings(String message) {}
     public static class Hooks implements AutoCloseable {
-        @PaperStart public void start() { assertSame(mainThread, Thread.currentThread()); actions.add("start"); }
-        @Override @PaperStop public void close() { assertSame(mainThread, Thread.currentThread()); actions.add("stop"); }
+        @OnPaperMainThreadStartup public void start() { assertSame(mainThread, Thread.currentThread()); actions.add("start"); }
+        @Override @OnPaperMainThreadShutdown public void close() { assertSame(mainThread, Thread.currentThread()); actions.add("stop"); }
     }
     public static class Resource implements AutoCloseable {
         @Override public void close() { actions.add("destroy"); }
@@ -99,6 +99,38 @@ class ApplicationLifecycleTest {
     public static class ExplicitDestruction {
         @PaperStop public void stop() { actions.add("owned-stop"); }
         public void destroy() { actions.add("duplicate-destroy"); }
+    }
+
+    @SpringPaperPluginApplication(name = "Relations", configurations = RelationFeatures.class)
+    public static class RelationHost extends JavaPlugin {}
+    @Configuration(proxyBeanMethods = false)
+    public static class RelationFeatures {
+        @Bean public NamedHook aOwner() { return new NamedHook("a"); }
+        @Bean public NamedHook zOwner() { return new NamedHook("z"); }
+        @Bean public Resource resource() { return new Resource(); }
+        @Bean public org.blu3fishez.springpaper.lifecycle.PaperLifecycleRelation startup(
+                @org.springframework.beans.factory.annotation.Qualifier("zOwner") NamedHook z,
+                @org.springframework.beans.factory.annotation.Qualifier("aOwner") NamedHook a) {
+            return org.blu3fishez.springpaper.lifecycle.PaperLifecycleRelation.startupBefore(z, a);
+        }
+        @Bean public org.blu3fishez.springpaper.lifecycle.PaperLifecycleRelation shutdown(
+                @org.springframework.beans.factory.annotation.Qualifier("zOwner") NamedHook z,
+                @org.springframework.beans.factory.annotation.Qualifier("aOwner") NamedHook a) {
+            return org.blu3fishez.springpaper.lifecycle.PaperLifecycleRelation.shutdownBefore(z, a);
+        }
+    }
+    public static class NamedHook {
+        private final String name;
+        NamedHook(String name) { this.name = name; }
+        @OnPaperMainThreadStartup public void start() { assertSame(mainThread, Thread.currentThread()); actions.add("start:" + name); }
+        @OnPaperMainThreadShutdown public void stop() { assertSame(mainThread, Thread.currentThread()); actions.add("stop:" + name); }
+    }
+    @Test void runsSpringSelectedRelationsOnPaperThreadBeforeDestroyingInfrastructure() {
+        actions.clear();
+        try (var application = SpringPaperApplication.run(host(RelationHost.class))) {
+            assertEquals(List.of("start:z", "start:a"), actions);
+        }
+        assertEquals(List.of("start:z", "start:a", "stop:z", "stop:a", "destroy"), actions);
     }
 
     private <T extends JavaPlugin> T host(Class<T> type) {

@@ -1,104 +1,46 @@
 package org.blu3fishez.springpaper.lifecycle;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import org.blu3fishez.springpaper.annotation.PaperStart;
-import org.blu3fishez.springpaper.annotation.PaperStop;
-import org.springframework.aop.support.AopUtils;
 import org.springframework.context.ApplicationContext;
-import org.springframework.util.ReflectionUtils;
 
-/** Explicit hooks run on the Paper thread, including cleanup of a partially failed start. */
+/** Main-thread activation and cleanup of attempted owners; discovery and ordering live in the plan. */
 public final class PaperLifecycleManager implements AutoCloseable {
-    private final List<Hook> pending = new ArrayList<>();
-    private final List<Hook> started = new ArrayList<>();
-    private boolean closed;
+    private enum State { NEW, STARTING, RUNNING, CLOSED }
+    private final PaperLifecyclePlan plan;
+    private final List<Integer> attempted = new ArrayList<>();
+    private State state = State.NEW;
 
     public PaperLifecycleManager(ApplicationContext context, Map<String, Class<?>> candidates) {
-        candidates.forEach((name, type) -> {
-            Method start = null;
-            Method stop = null;
-            for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
-                if (method.isAnnotationPresent(PaperStart.class) || method.isAnnotationPresent(PaperStop.class)) validate(method);
-            }
-            for (Method method : type.getMethods()) {
-                // 부모 선언을 별도로 실행하면 override가 중복 호출되고, 자식이 제거한 어노테이션도 살아난다.
-                // listener와 동일하게 public override 결과만 훅으로 채택한다.
-                if (method.isBridge() || method.isSynthetic()) continue;
-                if (method.isAnnotationPresent(PaperStart.class)) {
-                    if (start != null) throw new IllegalArgumentException(name + ": only one PaperStart is allowed");
-                    start = validate(method);
-                }
-                if (method.isAnnotationPresent(PaperStop.class)) {
-                    if (stop != null) throw new IllegalArgumentException(name + ": only one PaperStop is allowed");
-                    stop = validate(method);
-                }
-            }
-            if (start != null || stop != null) {
-                Object bean = context.getBean(name);
-                int phase = start == null ? 0 : phase(context, start.getAnnotation(PaperStart.class).phase(),
-                        start.getAnnotation(PaperStart.class).phaseString(), 0);
-                int stopPhase = stop == null ? Integer.MIN_VALUE : phase(context, stop.getAnnotation(PaperStop.class).phase(),
-                        stop.getAnnotation(PaperStop.class).phaseString(), Integer.MIN_VALUE);
-                pending.add(new Hook(name, bean, invocable(start, bean), invocable(stop, bean), phase,
-                        stopPhase == Integer.MIN_VALUE ? phase : stopPhase));
-            }
-        });
-        pending.sort(Comparator.comparingInt(Hook::phase).thenComparing(Hook::name));
+        plan = new PaperLifecyclePlan(context, candidates);
     }
-    private static int phase(ApplicationContext context, int declared, String expression, int defaultPhase) {
-        if (expression.isBlank()) return declared;
-        if (declared != defaultPhase) throw new IllegalArgumentException("Use phase or phaseString, not both");
-        String resolved = context.getEnvironment().resolveRequiredPlaceholders(expression);
-        try { return Integer.parseInt(resolved); }
-        catch (NumberFormatException failure) { throw new IllegalArgumentException("Lifecycle phase must resolve to an integer: " + expression, failure); }
-    }
-    private static Method invocable(Method method, Object bean) {
-        if (method == null) return null;
-        Method selected = AopUtils.selectInvocableMethod(method, bean.getClass());
-        ReflectionUtils.makeAccessible(selected);
-        return selected;
-    }
-    private static Method validate(Method method) {
-        if (!Modifier.isPublic(method.getModifiers()) || Modifier.isStatic(method.getModifiers())
-                || method.getParameterCount() != 0 || method.getReturnType() != void.class) {
-            throw new IllegalArgumentException(method + ": lifecycle hook must be public void with no arguments");
-        }
-        return method;
-    }
+
     public void start() {
-        for (Hook hook : pending) {
-            // start 내부에서 일부 자원을 얻은 뒤 실패해도 stop이 필요하므로 호출 전에 정리 대상으로 기록한다.
-            started.add(hook);
-            invoke(hook, hook.start);
+        if (state == State.RUNNING) return;
+        if (state != State.NEW) throw new IllegalStateException("Paper lifecycle cannot restart after failure or close");
+        state = State.STARTING;
+        for (int position : plan.startup()) {
+            // Record before invocation: the failing owner must clean resources acquired by its partial start.
+            // A stop-only owner is enrolled internally, without forcing an empty public start method.
+            attempted.add(position);
+            plan.hook(position).startOwner();
         }
-        pending.clear();
+        state = State.RUNNING;
     }
+
     @Override public void close() {
-        if (closed) return;
-        closed = true;
+        if (state == State.CLOSED) return;
+        state = State.CLOSED;
         RuntimeException failure = null;
-        // 기존 소비자의 producer 정리 뒤 기록 flush는 시작 순서의 단순 역순과 다를 수 있다.
-        // 명시한 종료 phase만 우선하고, 같은 phase에서는 실제 시작 시도 순서의 역순을 유지한다.
-        var shutdown = new ArrayList<>(started.reversed());
-        shutdown.sort(Comparator.comparingInt(Hook::stopPhase).reversed());
-        for (Hook hook : shutdown) {
-            try { invoke(hook, hook.stop); }
-            catch (RuntimeException error) { if (failure == null) failure = error; else failure.addSuppressed(error); }
+        for (int position : plan.shutdown(attempted)) {
+            try { plan.hook(position).stopOwner(); }
+            catch (RuntimeException error) {
+                if (failure == null) failure = error;
+                else failure.addSuppressed(error);
+            }
         }
-        started.clear();
+        attempted.clear();
         if (failure != null) throw failure;
     }
-    private static void invoke(Hook hook, Method method) {
-        if (method == null) return;
-        try { method.invoke(hook.bean); }
-        catch (InvocationTargetException error) { throw new IllegalStateException("Lifecycle hook failed: " + hook.name, error.getCause()); }
-        catch (ReflectiveOperationException error) { throw new IllegalStateException("Lifecycle hook is not invocable: " + hook.name, error); }
-    }
-    private record Hook(String name, Object bean, Method start, Method stop, int phase, int stopPhase) {}
 }

@@ -76,23 +76,47 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 ```java
 @Service
 public final class GuideLifecycleService {
-    @PaperStart(phase = 0)
+    @OnPaperMainThreadStartup
     public void start() { /* 발전과제 준비, 기존 상태 복구, 반복 작업 시작 */ }
 
-    @PaperStop
+    @OnPaperMainThreadShutdown
     public void stop() { /* 반복 작업 취소, 미확정 기록 flush */ }
 }
 ```
 
-빈마다 public void 무인자 시작·종료 메서드를 하나씩 제공할 수 있다. 낮은 phase부터 시작하고, 같은 phase는 빈 이름순이다. 기본 종료는 실제 시작 시도 순서의 역순이며 실패한 시작의 부분 정리도 호출한다. `@PaperStop(phase = ...)`로 종료 순서를 독립적으로 정하면 높은 값부터 닫는다. 양 훅의 `phaseString = "${feature.phase}"`은 역할별 정수 설정을 받을 수 있으며 기본값이 아닌 phase와 동시에 지정하지 않는다. `@DependsOn`은 Spring 빈 생성 순서이며 이 훅의 순서를 대신하지 않는다.
+이 두 어노테이션은 Spring Paper가 제공하는 **Paper 메인 스레드 전용 콜백**이며 Spring 표준
+어노테이션이 아니다. Startup은 worker의 컨텍스트 준비 뒤·입력 등록 전에, Shutdown은 입력 해제 뒤·
+worker drain 및 Spring 인프라 종료 전에 실행된다. DB·캐시·TaskScheduler 같은 일반 빈은 Spring이 관리한다.
 
-동일 빈의 `@PaperStop`과 `@PreDestroy`/`DisposableBean`을 중복 사용하지 않는다. `@PaperStop`이 있으면 Spring의 명시적 `@Bean(destroyMethod=...)`와 AutoCloseable 추론 종료 대신 이 훅만 실행한다. 정리는 부분 초기화와 중복 호출에 안전해야 한다.
+순서가 무관한 콜백에는 관계나 숫자가 필요 없다. 기본 시작은 빈 이름순, 기본 종료는 실제 시작 시도의 역순이다.
+부분 시작에 실패한 소유자도 정리하며, 아직 시작을 시도하지 않은 소유자는 실행하지 않는다.
+종료만 있는 소유자는 빈 start 메서드 없이도 내부 활성화 순회에 참여한다.
+
+필요한 관계는 표준 Spring 빈으로 선언한다. 타입·Qualifier·alias로 선택한 실제 소유자를 넘기므로
+별도 빈 선택자나 다른 도메인 구현의 참조를 만들 필요가 없다.
+
+```java
+@Bean
+PaperLifecycleRelation checkpointBeforeSessionCleanup(
+        CheckpointOwner checkpoint, SessionOwner sessions) {
+    return PaperLifecycleRelation.shutdownBefore(checkpoint, sessions);
+}
+```
+
+`startupBefore(first, next)`와 `shutdownBefore(first, next)`는 독립적 관계다. 두 그래프의 순환과
+잘못된 소유자·훅 참조를 어떤 콜백도 실행하기 전에 거절한다. 역할별 관계는 역할별 Configuration에 둔다.
+한 소유자의 내부 정리 체인은 그대로 유지한다. `@DependsOn`은 빈 생성 의존성이며 Paper 준비 완료를 뜻하지 않는다.
+
+기존 `PaperStart`·`PaperStop`과 phase/phaseString은 호환용으로 지원한다. 새 코드에는 명시적인 스레드/시점
+어노테이션을 사용한다. 기존 숫자는 관계로 정해지지 않은 후보의 정렬에만 사용하며 명시적 관계가 우선한다.
+
+동일 빈의 `@OnPaperMainThreadShutdown`과 `@PreDestroy`/`DisposableBean`을 중복 사용하지 않는다. `@OnPaperMainThreadShutdown`이 있으면 Spring의 명시적 `@Bean(destroyMethod=...)`와 AutoCloseable 추론 종료 대신 이 훅만 실행한다. 정리는 부분 초기화와 중복 호출에 안전해야 한다.
 
 훅이 소유하는 자원은 start/ready 이후에 획득한다. 아직 시작을 시도하지 않은 훅은 종료 때 호출하지 않는다. 컨텍스트 생성 중 획득할 DB·네트워크 자원은 별도 Spring 빈으로 두고 Spring의 정상 destruction 계약으로 정리한다.
 
 실행 순서는 설정 로딩·initializer → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리한다. 기본 실패 정책은 해당 플러그인을 실패시키며, 소비자가 `SpringPaperPlugin.onApplicationStartupFailure`를 재정의해 정리 후의 서버 운영 정책을 선택할 수 있다.
 
-일반 Spring `@PostConstruct`와 `SmartLifecycle`은 컨텍스트 준비 작업자에서 실행될 수 있다. Paper 상태 변경은 `@PaperStart/@PaperStop`, ready 이벤트 또는 `PaperTasks.main`에서 수행한다.
+일반 Spring `@PostConstruct`와 `SmartLifecycle`은 컨텍스트 준비 작업자에서 실행될 수 있다. Paper 상태 변경은 `@OnPaperMainThreadStartup/@OnPaperMainThreadShutdown`, ready 이벤트 또는 `PaperTasks.main`에서 수행한다.
 
 ## YAML과 개발 서버
 
