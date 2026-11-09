@@ -1,7 +1,7 @@
 {
   "date": "2026-11-09",
   "junit": {
-    "tests": 128,
+    "tests": 137,
     "failures": 0,
     "errors": 0,
     "skipped": 0
@@ -9,9 +9,9 @@
   "modules": {
     "spring-paper-cache": 7,
     "spring-paper-config": 4,
-    "spring-paper-core": 55,
+    "spring-paper-core": 61,
     "spring-paper-data-jdbc": 4,
-    "spring-paper-data-jpa": 6,
+    "spring-paper-data-jpa": 9,
     "spring-paper-data-pdc": 10,
     "spring-paper-gradle-plugin": 3,
     "spring-paper-security": 12,
@@ -19,8 +19,8 @@
   },
   "example_jar": {
     "path": "examples/guide-plugin/build/libs/spring-paper-example-0.1.0-SNAPSHOT.jar",
-    "sha256": "2172f4ba0c67244e40145545838dccf78f4f35545a6c4f6385d46d959c24ee8e",
-    "bytes": 40094942,
+    "sha256": "4d5c01cff7d37d74388d80c762c871c06df831e4c7b1ea4510ef1ef70f6e338a",
+    "bytes": 40096770,
     "duplicate_entries": 0,
     "boot_classes": 0,
     "bukkit_classes": 0,
@@ -41,11 +41,11 @@
   "published_consumer": {
     "version": "0.1.0-SNAPSHOT",
     "repository": "build/verification-repository",
-    "consumer": "build/publication-consumer-r13jg7f5",
+    "consumer": "build/publication-consumer-_zjbxp6l",
     "included_build": false,
     "configuration_cache_reused": true,
-    "jar": "build/publication-consumer-r13jg7f5/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
-    "sha256": "0079372a5cbe52aae307fd2225280da41aff09b2f32307a001f165f17b4c9562",
+    "jar": "build/publication-consumer-_zjbxp6l/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "03019dd79b1475c529baad745310ad8f22bed45cb10ac54c35875196a4f36e3f",
     "current_library_classes_verified": 136,
     "duplicate_entries": 0,
     "forbidden_packages": {
@@ -101,22 +101,22 @@
       ]
     },
     "log_evidence": [
-      "[15:22:38] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
-      "[15:22:38] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
-      "[15:22:41] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
-      "[15:22:45] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_PREPARED",
-      "[15:22:45] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
-      "[15:22:47] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[15:23:53] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[15:23:54] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
-      "[15:23:54] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_RELEASED",
-      "[15:23:54] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
-      "[15:23:54] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
-      "[15:23:54] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
+      "[22:38:41] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
+      "[22:38:41] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
+      "[22:38:44] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
+      "[22:38:47] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_PREPARED",
+      "[22:38:47] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
+      "[22:38:50] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[22:39:56] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[22:39:56] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
+      "[22:39:56] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_RELEASED",
+      "[22:39:56] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
+      "[22:39:56] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
+      "[22:39:56] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
     ],
     "command": "./gradlew -p examples/guide-plugin -PspringPaper.configuration=application-local.yml runServer --console=plain",
     "log": "examples/guide-plugin/run/logs/latest.log",
-    "plugin_jar_sha256": "2172f4ba0c67244e40145545838dccf78f4f35545a6c4f6385d46d959c24ee8e"
+    "plugin_jar_sha256": "4d5c01cff7d37d74388d80c762c871c06df831e4c7b1ea4510ef1ef70f6e338a"
   },
   "fixed_native_failure": {
     "symptom": "FileNotFoundException: org/bukkit/command/CommandExecutor.class",
@@ -125,11 +125,11 @@
     "regression": "PaperClassLoaderTest"
   },
   "coverage_limits": [
-    "No real player or Minecraft client coverage; Paper admission uses mock host/API tests",
-    "Host-neutral core and synthetic consumer proof tested; no real Velocity server or Discord OAuth web flow",
-    "H2 used; MariaDB/Redis integration not exercised",
-    "Multiple plugins with incompatible Spring versions not exercised",
-    "SimpleExtraction adoption is in phase 2; its role/auth context and staging validation are not covered by this library report"
+    "No real player or Minecraft client login/gameplay coverage; admission has API/mock and synthetic provider coverage",
+    "Native SimpleExtraction Paper role boot/restart and Velocity PREMIUM_ONLY/TEST_ONLY bootstrap were verified separately; Discord OAuth web round trip was not tested",
+    "Library persistence tests use H2; the separate SimpleExtraction native consumer also used isolated MariaDB 11.8.8 and Redis 8.8.0-alpine",
+    "Multiple plugins with incompatible Spring versions were not exercised",
+    "Production/dev cluster replacement, full Docker wrapper and client/load testing were not performed"
   ],
   "security_fixed_failures": [
     {
@@ -249,5 +249,12 @@
       "source_restored": true,
       "source_sha256": "24490c78958d577375583101f93dedeb53bf87cc7c410210c89626437e3fa048"
     }
+  },
+  "fixed_bootstrap_class_loader_failure": {
+    "symptom": "ClassNotFoundException for a consumer Conditional implementation present in the plugin JAR",
+    "cause": "Spring BeanFactory captured the server TCCL because context construction preceded the plugin loader scope",
+    "fix": "Construct the application context inside the plugin TCCL scope; restore the host loader afterward",
+    "regression": "BootstrapClassLoaderTest.constructsSpringInfrastructureWithThePluginLoaderAndRestoresTheHostLoader",
+    "failed_before_fix": true
   }
 }

@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew check assemble`: 전체 빌드와 136개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew check assemble`: 전체 빌드와 137개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,7 +15,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 136개, 실패·오류·스킵 0.
+총 137개, 실패·오류·스킵 0.
 
 추가 회귀 검사에서 표준 FactoryBean으로 EMF만 제공하는 구성, 사용자 트랜잭션 관리자도 제공하는 구성,
 관련 없는 DataSource가 여러 개인 구성을 실제 H2 저장·조회·rollback으로 확인했다. 수정 전 세 경우가
@@ -26,7 +26,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 |---|---:|
 | spring-paper-cache | 7 |
 | spring-paper-config | 4 |
-| spring-paper-core | 60 |
+| spring-paper-core | 61 |
 | spring-paper-data-jpa | 9 |
 | spring-paper-data-jdbc | 4 |
 | spring-paper-data-pdc | 10 |
@@ -68,6 +68,22 @@ Security core는 Bukkit/Velocity가 없는 classpath에서 실제 Spring Manager
 Paper 접속 검사는 mock host에서 실제 Spring Paper bootstrap과 native 이벤트 타입을 사용한다. 소비자 admission 정책, 기존 호스트 거절 보존, pending 입장/후속 인증, 입장 직전 철회, 이전 Player의 quit와 새 연결 분리, snapshot TTL·비동기 Player 권한 조회 방지·문맥 복원·소비자 기본값 교체를 확인한다. 관찰 이벤트가 실패해도 core 철회 검사가 오래된 권한을 차단한다.
 
 Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현했다. 일반 클래스 로더 대조군은 통과하고, Paper와 같은 local-only 리소스 로더에서 CommandExecutor.class 조회가 실패했다. 수정 후 컴포넌트 스캔·full Configuration·CGLIB cache proxy·호스트 타입 정체성·리소스 우선순위/중복 제거가 모두 통과한다.
+
+## 컨텍스트 생성 시 클래스 로더 회귀
+
+실제 SimpleExtraction Paper 기동에서 JAR 안에 있는 소비자의 Conditional 클래스를 찾지 못했다.
+플러그인 TCCL로 전환하기 전에 컨텍스트를 만들었기 때문에 BeanFactory가 서버 로더를 캡처했다.
+Spring 7.0.10의 [컨텍스트 생성](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/AnnotationConfigApplicationContext.java)과
+[조건 클래스 로더 선택](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/ConditionEvaluator.java)을 확인했다.
+생성 뒤 context.setClassLoader만 호출하는 방식으로는 초기 조건 검사까지 교정되지 않았다.
+
+호스트 로더에서 조건 클래스를 숨긴 회귀 테스트가 수정 전 같은 ClassNotFoundException으로 실패했다.
+컨텍스트 생성부터 플러그인 TCCL 범위에 넣은 뒤 통과하며 호출자 로더의 복원도 검사한다.
+소비자 타입별 예외 처리나 서버 전역 로더 변경은 추가하지 않았다. 실패 원인은 bootstrap 코드 주석에도 기록했다.
+
+동일 수정으로 소비자의 실제 Paper 두 역할과 Velocity 두 인증 모드를 별도 자원에서 기동했다.
+Paper는 명령·DB migration 36개·데이터팩 재로딩·종료·재시작을 확인했고, 던전의 시련 목적지 48개가
+첫 실행에서 검색되고 재시작 뒤 DB에서 48개 복원됐다. 실제 플레이어 접속이나 운영 부하 검사는 포함하지 않는다.
 
 ## 실제 Paper 기동과 종료
 
@@ -148,11 +164,11 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 136개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 368f39c5844fb7b6184fc9c4c79219b535a0fac198048278a7cd6ba902f4eac7
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 4d5c01cff7d37d74388d80c762c871c06df831e4c7b1ea4510ef1ef70f6e338a
 - 크기: 40096771 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), PDC·JPA·JDBC·Cache·Security SPI 제공자 5개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: c02234eedb5543bc7474a8e4fca23d2ba6037bd25ff5b2015cc9b04beb44f856
+- 독립 Maven 소비 JAR SHA-256: 03019dd79b1475c529baad745310ad8f22bed45cb10ac54c35875196a4f36e3f
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계

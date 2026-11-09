@@ -44,14 +44,20 @@ public final class SpringPaperApplication implements AutoCloseable {
 
     public static SpringPaperApplication run(JavaPlugin plugin) {
         if (!plugin.getServer().isPrimaryThread()) throw new IllegalStateException("Start Spring Paper on the server thread");
-        SpringPaperApplication application = new SpringPaperApplication(plugin);
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
-        try { application.start(); return application; }
-        catch (Throwable error) {
-            try { application.close(); } catch (Throwable cleanup) { error.addSuppressed(cleanup); }
-            if (error instanceof Error fatal) throw fatal;
-            throw new IllegalStateException("Spring Paper startup failed for " + plugin.getName(), error);
+        try {
+            // 컨텍스트 생성 시 BeanFactory가 현재 TCCL을 캡처하고, ConditionEvaluator는
+            // 초기 조건 평가에서 그 로더를 사용한다. 생성 뒤 context.setClassLoader만
+            // 호출하면 실제 Paper의 서버 로더로 소비자 조건 클래스를 찾다가 실패한다.
+            // refresh뿐 아니라 컨텍스트 생성부터 플러그인 로더 범위 안에서 실행한다.
+            SpringPaperApplication application = new SpringPaperApplication(plugin);
+            try { application.start(); return application; }
+            catch (Throwable error) {
+                try { application.close(); } catch (Throwable cleanup) { error.addSuppressed(cleanup); }
+                if (error instanceof Error fatal) throw fatal;
+                throw new IllegalStateException("Spring Paper startup failed for " + plugin.getName(), error);
+            }
         } finally { Thread.currentThread().setContextClassLoader(previous); }
     }
 
