@@ -1,7 +1,7 @@
 {
   "date": "2026-11-09",
   "junit": {
-    "tests": 104,
+    "tests": 110,
     "failures": 0,
     "errors": 0,
     "skipped": 0
@@ -9,8 +9,8 @@
   "modules": {
     "spring-paper-cache": 7,
     "spring-paper-config": 4,
-    "spring-paper-core": 38,
-    "spring-paper-data-jpa": 3,
+    "spring-paper-core": 42,
+    "spring-paper-data-jpa": 5,
     "spring-paper-data-pdc": 10,
     "spring-paper-gradle-plugin": 3,
     "spring-paper-security": 12,
@@ -18,8 +18,8 @@
   },
   "example_jar": {
     "path": "examples/guide-plugin/build/libs/spring-paper-example-0.1.0-SNAPSHOT.jar",
-    "sha256": "5a5d17a763a53fe282322a6948288ea7ce993a9321171c14189168718439f268",
-    "bytes": 40066516,
+    "sha256": "47128c27c7362d9de90f8a92494f426bfc8f19513aaaafd6758765cd111ef1b3",
+    "bytes": 40075943,
     "duplicate_entries": 0,
     "boot_classes": 0,
     "bukkit_classes": 0,
@@ -33,18 +33,18 @@
       "org.blu3fishez.springpaper.cache.CacheModule",
       "org.blu3fishez.springpaper.security.SecurityModule"
     ],
-    "current_library_classes_verified": 114,
+    "current_library_classes_verified": 122,
     "lombok_classes": 0
   },
   "published_consumer": {
     "version": "0.1.0-SNAPSHOT",
     "repository": "build/verification-repository",
-    "consumer": "build/publication-consumer-0aqm4y1f",
+    "consumer": "build/publication-consumer-c6cnmjl8",
     "included_build": false,
     "configuration_cache_reused": true,
-    "jar": "build/publication-consumer-0aqm4y1f/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
-    "sha256": "5f7267dc0f00345213c985746d69c960dd0699127c0f29c1e10cdbbb98497f15",
-    "current_library_classes_verified": 114,
+    "jar": "build/publication-consumer-c6cnmjl8/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "701cadbf9b667def69896a67a54e5f056627fa82e80743bf8bc14b1cdb71f3ea",
+    "current_library_classes_verified": 122,
     "duplicate_entries": 0,
     "forbidden_packages": {
       "org/springframework/boot/": 0,
@@ -96,20 +96,20 @@
       ]
     },
     "log_evidence": [
-      "[13:11:40] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
-      "[13:11:40] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
-      "[13:11:44] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
-      "[13:11:46] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
-      "[13:11:49] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[13:12:55] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[13:12:55] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
-      "[13:12:55] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
-      "[13:12:55] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
-      "[13:12:55] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
+      "[13:58:25] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
+      "[13:58:25] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
+      "[13:58:29] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
+      "[13:58:32] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
+      "[13:58:35] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[13:59:40] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[13:59:41] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
+      "[13:59:41] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
+      "[13:59:41] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
+      "[13:59:41] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
     ],
     "command": "./gradlew -p examples/guide-plugin -PspringPaper.configuration=application-local.yml runServer --console=plain",
     "log": "examples/guide-plugin/run/logs/latest.log",
-    "plugin_jar_sha256": "5a5d17a763a53fe282322a6948288ea7ce993a9321171c14189168718439f268"
+    "plugin_jar_sha256": "47128c27c7362d9de90f8a92494f426bfc8f19513aaaafd6758765cd111ef1b3"
   },
   "fixed_native_failure": {
     "symptom": "FileNotFoundException: org/bukkit/command/CommandExecutor.class",
@@ -178,6 +178,13 @@
       "assertion_detected": true,
       "restored": true,
       "source_sha256": "efcaf4a1db4fcf1ab1471942b39737eac945f63d5f867db9dbbf8ec2a7f6c90a"
+    },
+    {
+      "mutation": "disabled-event-prefix",
+      "exit_code": 1,
+      "assertion_detected": true,
+      "restored": true,
+      "source_sha256": "aac9ca484b840bf0e6cfe4a4adb87b603c3f902780910dc218c0010cea4fffec"
     }
   ],
   "lombok_api_verification": {

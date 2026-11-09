@@ -21,9 +21,11 @@ import org.blu3fishez.springpaper.config.PaperEnvironment;
 import org.blu3fishez.springpaper.config.PaperServerInfo;
 import org.blu3fishez.springpaper.lifecycle.PaperLifecycleManager;
 import org.blu3fishez.springpaper.listener.PaperListenerRegistrar;
+import org.blu3fishez.springpaper.listener.PaperEventOrderRegistry;
 import org.blu3fishez.springpaper.service.PaperInvocationService;
 import org.blu3fishez.springpaper.spi.PaperInvocationInterceptor;
 import org.blu3fishez.springpaper.spi.PaperEventOrderContributor;
+import org.blu3fishez.springpaper.spi.PaperEventOrderConfigurer;
 import org.blu3fishez.springpaper.spi.SpringPaperModule;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
 import org.blu3fishez.springpaper.task.PaperTasks;
@@ -128,11 +130,14 @@ public final class SpringPaperApplication implements AutoCloseable {
                     return order == 0 ? left.name.compareTo(right.name) : order;
                 }).toList();
         // Event relationships require the complete active batch, not one global number on every listener.
+        var eventOrder = new PaperEventOrderRegistry();
+        context.getBeanProvider(PaperEventOrderConfigurer.class).orderedStream()
+                .forEach(configurer -> configurer.configure(eventOrder));
         listeners.registerAll(adapters.stream()
                 .filter(entry -> factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null)
                 .map(entry -> new PaperListenerRegistrar.Candidate(entry.name, entry.bean, entry.type)).toList(),
                 context.getBeanProvider(PaperEventOrderContributor.class).orderedStream()
-                        .flatMap(contributor -> List.copyOf(contributor.relations()).stream()).toList());
+                        .flatMap(contributor -> List.copyOf(contributor.relations()).stream()).toList(), eventOrder);
         adapters.forEach(entry -> {
             for (PaperCommandExecutor command : AnnotatedElementUtils.getMergedRepeatableAnnotations(entry.type, PaperCommandExecutor.class)) {
                 commands.register(entry.name, entry.bean, command);

@@ -61,6 +61,12 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 
 서로 다른 기능의 구현 사이에 의존성을 만들 수 없는 관계는 최상위 `@Configuration`에서 `PaperEventOrderContributor` 빈으로 제공한다. `PaperEventRelation(event, priority, before, after)`는 같은 native 목록과 우선순위 안에만 적용되며, 메서드 어노테이션과 함께 순환을 검증한다.
 
+앱에서 리플렉션·프록시 타입을 다루지 않으려면 `PaperEventOrderConfigurer`를 제공한다.
+`first(priority, ListenerType...)`는 해당 우선순위의 native 목록마다 앞부분에 실행할 그룹을 선언한다.
+`firstBean`·`beforeBean`·`beforeBeans`는 소유 객체가 노출한 factory adapter의 Spring 빈 이름을 사용한다.
+`before(event, priority, beforeType, afterTypes...)`로 나머지 관계를 선언한다. 활성 입력의 실제 메타데이터를
+코어가 해석하며 기존 관계·어노테이션과 같은 그래프에서 순환을 검증한다.
+
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 
 핸들러와 lifecycle 훅은 Java의 override 규칙을 따른다. 재정의한 메서드의 어노테이션만 적용하며 부모와 자식을 중복 등록하지 않는다. 재정의 메서드에서 어노테이션을 제거하면 부모의 어노테이션도 실행되지 않는다.

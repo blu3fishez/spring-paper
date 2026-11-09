@@ -75,6 +75,12 @@ class EventOrderingTest {
         @Override public HandlerList getHandlers() { return HANDLERS; }
         public static HandlerList getHandlerList() { return HANDLERS; }
     }
+    public static class Named implements Listener {
+        private final List<String> calls;
+        private final String label;
+        Named(List<String> calls, String label) { this.calls = calls; this.label = label; }
+        @EventHandler(priority = EventPriority.HIGHEST) public void damage(Damage event) { calls.add(label); }
+    }
     public static class SeparateListA implements Listener {
         @PaperEventOrder(after = SeparateListB.class)
         @EventHandler public void damage(Damage event) {}
@@ -209,6 +215,59 @@ class EventOrderingTest {
                     new PaperListenerRegistrar.Candidate("counter", new Counter(new ArrayList<>()), Counter.class)),
                     List.of(new PaperEventRelation(Damage.class, EventPriority.HIGHEST, Counter.class, Armor.class))));
             verifyNoInteractions(host.manager);
+        }
+    }
+
+    @Test void registryPrefixOrdersGroupsBeforeAllOtherActiveInputs() throws Exception {
+        var host = new Host(); var calls = new ArrayList<String>();
+        var order = new PaperEventOrderRegistry();
+        order.first(EventPriority.HIGHEST, ConfiguredCounter.class, Armor.class);
+        try (var registrar = host.registrar()) {
+            registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("other", new Named(calls, "other"), Named.class),
+                    new PaperListenerRegistrar.Candidate("armor", new Armor(calls), Armor.class),
+                    new PaperListenerRegistrar.Candidate("counter", new ConfiguredCounter(calls), ConfiguredCounter.class)), List.of(), order);
+            for (var callback : host.callbacks) callback.execute(null, new Damage());
+            assertEquals(List.of("counter", "armor", "other"), calls);
+        }
+    }
+
+    @Test void registryBeanReferencesDistinguishTwoInstancesOfOneFactoryType() throws Exception {
+        var host = new Host(); var calls = new ArrayList<String>();
+        var order = new PaperEventOrderRegistry();
+        order.firstBean(EventPriority.HIGHEST, "first");
+        try (var registrar = host.registrar()) {
+            registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("last", new Named(calls, "last"), Named.class),
+                    new PaperListenerRegistrar.Candidate("first", new Named(calls, "first"), Named.class)), List.of(), order);
+            for (var callback : host.callbacks) callback.execute(null, new Damage());
+            assertEquals(List.of("first", "last"), calls);
+        }
+    }
+
+    @Test void registryNamedRelationshipParticipatesInTheAnnotationCycleCheck() {
+        var host = new Host(); var order = new PaperEventOrderRegistry();
+        order.beforeBeans(Damage.class, EventPriority.HIGHEST, Counter.class, "armor");
+        try (var registrar = host.registrar()) {
+            assertThrows(IllegalArgumentException.class, () -> registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("armor", new Armor(new ArrayList<>()), Armor.class),
+                    new PaperListenerRegistrar.Candidate("counter", new Counter(new ArrayList<>()), Counter.class)), List.of(), order));
+            verifyNoInteractions(host.manager);
+        }
+    }
+
+    @Test void inactiveRegistryReferencesDoNotChangeOtherNativePriorities() throws Exception {
+        var host = new Host(); var calls = new ArrayList<String>();
+        var order = new PaperEventOrderRegistry();
+        order.first(EventPriority.LOWEST, Counter.class);
+        order.firstBean(EventPriority.HIGHEST, "inactive");
+        order.beforeBean(Damage.class, EventPriority.HIGHEST, "inactive", Armor.class);
+        try (var registrar = host.registrar()) {
+            registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("other", new Named(calls, "other"), Named.class),
+                    new PaperListenerRegistrar.Candidate("armor", new Armor(calls), Armor.class)), List.of(), order);
+            for (var callback : host.callbacks) callback.execute(null, new Damage());
+            assertEquals(List.of("other", "armor"), calls);
         }
     }
 }

@@ -21,7 +21,8 @@ final class PaperEventPlan {
     private PaperEventPlan() {}
 
     @SuppressWarnings("unchecked")
-    static List<Handler> build(List<PaperListenerRegistrar.Candidate> candidates, List<PaperEventRelation> relations) {
+    static List<Handler> build(List<PaperListenerRegistrar.Candidate> candidates, List<PaperEventRelation> relations,
+            PaperEventOrderRegistry registry) {
         List<Handler> handlers = new ArrayList<>();
         for (var candidate : candidates) {
             Class<?> type = candidate.type();
@@ -48,7 +49,7 @@ final class PaperEventPlan {
                         handlers.add(new Handler(candidate, method, event, eventType, nativeHandlers(eventType), handlers.size()));
                     });
         }
-        return order(handlers, relations);
+        return order(handlers, relations, registry);
     }
 
     private static HandlerList nativeHandlers(Class<? extends Event> event) {
@@ -69,7 +70,7 @@ final class PaperEventPlan {
         }
     }
 
-    private static List<Handler> order(List<Handler> handlers, List<PaperEventRelation> relations) {
+    private static List<Handler> order(List<Handler> handlers, List<PaperEventRelation> relations, PaperEventOrderRegistry registry) {
         // Index metadata, not consumer beans: hashCode/equals on a listener may depend on mutable game state.
         List<LinkedHashSet<Integer>> edges = new ArrayList<>();
         int[] remaining = new int[handlers.size()];
@@ -94,6 +95,25 @@ final class PaperEventPlan {
             var after = handlers.stream().filter(handler -> handler.handlers == nativeList
                     && handler.metadata.priority() == rule.priority()
                     && rule.after().isAssignableFrom(handler.candidate.type())).toList();
+            for (Handler first : before) for (Handler last : after) relation(first, last, edges, remaining);
+        }
+        // Native handler metadata is already resolved here. Applications describe prefixes/relations without
+        // reflecting EventHandler methods, unwrapping Spring proxies or instantiating an inactive role.
+        for (Handler first : handlers) {
+            int position = registry.prefixPosition(first.metadata.priority(), first.candidate);
+            if (position < 0) continue;
+            for (Handler last : handlers) {
+                if (first.handlers != last.handlers || first.metadata.priority() != last.metadata.priority()) continue;
+                int later = registry.prefixPosition(last.metadata.priority(), last.candidate);
+                if (later < 0 || position < later) relation(first, last, edges, remaining);
+            }
+        }
+        for (var rule : registry.rules()) {
+            var nativeList = nativeHandlers(rule.event());
+            var before = handlers.stream().filter(handler -> handler.handlers == nativeList
+                    && handler.metadata.priority() == rule.priority() && rule.before().matches(handler.candidate)).toList();
+            var after = handlers.stream().filter(handler -> handler.handlers == nativeList
+                    && handler.metadata.priority() == rule.priority() && rule.after().matches(handler.candidate)).toList();
             for (Handler first : before) for (Handler last : after) relation(first, last, edges, remaining);
         }
         var ready = new PriorityQueue<Integer>();

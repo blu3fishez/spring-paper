@@ -14,7 +14,7 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.context.annotation.Import;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @Configuration(proxyBeanMethods = false)
 @EnableTransactionManagement
-@EnableJpaRepositories(basePackages = "${spring.paper.jpa.repositories}")
+@Import(JpaRepositoryScanning.class)
 public class JpaConfiguration {
     /** Runs after user configurations are parsed, so existing resources are reused, not shadowed. */
     @Bean public static BeanFactoryPostProcessor springPaperJpaInfrastructure(PaperConfiguration properties) {

@@ -43,8 +43,13 @@ public final class PaperListenerRegistrar implements AutoCloseable {
 
     /** Batch plus composition-root relationships; all constraints share one validated graph. */
     public void registerAll(List<Candidate> candidates, List<PaperEventRelation> relations) {
+        registerAll(candidates, relations, new PaperEventOrderRegistry());
+    }
+
+    public void registerAll(List<Candidate> candidates, List<PaperEventRelation> relations, PaperEventOrderRegistry registry) {
         if (closed) throw new IllegalStateException("Paper listener registrar is closed");
-        var plan = PaperEventPlan.build(List.copyOf(candidates), List.copyOf(relations));
+        var plan = PaperEventPlan.build(List.copyOf(candidates), List.copyOf(relations),
+                java.util.Objects.requireNonNull(registry));
         Map<Candidate, Listener> tokens = new IdentityHashMap<>();
         for (var entry : plan) {
             String name = entry.candidate().name();

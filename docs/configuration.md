@@ -102,6 +102,10 @@ spring:
 
 repositories/entities는 제한된 패키지 목록 또는 쉼표 구분 문자열이다. Hikari/Hibernate 기본 자원은 Spring이 소유하고 종료한다. DataSource·EntityManagerFactory·PlatformTransactionManager가 이미 하나 있으면 재사용한다. 여러 개면 아래 키로 명시한다.
 
+소비자의 표준 `@EnableJpaRepositories`로 역할별 스캔을 구성할 수 있다. 이 경우 repositories 속성은
+필요 없다. 해당 속성을 명시하면 기존 YAML 스캔을 사용한다. 직접 제공한 EntityManagerFactory에서는
+엔티티 패키지와 Flyway 완료 의존성도 소비자의 표준 Spring 구성으로 지정할 수 있다.
+
 - `spring.paper.jpa.data-source-bean`
 - `spring.paper.jpa.entity-manager-factory-bean`
 - `spring.paper.jpa.transaction-manager-bean`
@@ -182,6 +186,11 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 SpringPaperModule SPI는 코어가 호출하고 선택 모듈이 구현한다. META-INF/services 등록과 enabledProperty/configurationClass를 제공하면 활성화된 모듈 구성만 컨텍스트에 들어온다. provider 생성자는 I/O와 자원 생성을 하지 않는다.
 
 PaperEventOrderContributor SPI는 소비자의 최상위 구성 모듈이 구현하고 코어가 native 등록 전에 한 번 호출한다. 반환한 PaperEventRelation의 event·priority 범위에서 before/after를 메서드 관계와 같은 그래프에 합친다. 다른 역할에서 빠진 리스너를 생성하지 않으며, 순환이면 등록 전에 실패한다. 기능 구현끼리 순서 때문에 의존하도록 만들지 않는다.
+
+PaperEventOrderConfigurer SPI도 소비자가 구현하고 코어가 등록 전에 호출한다. 전달된 PaperEventOrderRegistry의
+first/firstBean 호출은 우선순위별 순서 접두부에 그룹을 추가한다. 같은 그룹의 여러 메서드는 기본 순서를 유지한다.
+before/beforeBean/beforeBeans는 특정 native event/priority의 관계를 추가한다. 빈 이름 참조는 같은 타입의
+서로 다른 factory 인스턴스를 구별한다. 리스너의 실제 타입·메서드·HandlerList 해석은 코어가 소유한다.
 
 PaperInvocationInterceptor SPI는 코어의 이벤트·명령·탭 완성 경로를 감싼다. Spring orderedStream 순서를 따른다. 실제 빈은 생성자 주입하며, 어노테이션을 읽기 위해 프록시를 벗겨 원본을 호출하지 않는다.
 

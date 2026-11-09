@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew build`: 전체 빌드와 104개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew build`: 전체 빌드와 110개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,14 +15,14 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 104개, 실패·오류·스킵 0.
+총 110개, 실패·오류·스킵 0.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 7 |
 | spring-paper-config | 4 |
-| spring-paper-core | 38 |
-| spring-paper-data-jpa | 3 |
+| spring-paper-core | 42 |
+| spring-paper-data-jpa | 5 |
 | spring-paper-data-pdc | 10 |
 | spring-paper-gradle-plugin | 3 |
 | spring-paper-security | 12 |
@@ -37,6 +37,14 @@ CachingConfigurer의 CacheResolver·KeyGenerator를 실제 Spring 컨텍스트�
 소비자 resolver가 선택되면 Caffeine 설정 없이 기동하고 사용하지 않는 기본 제공자의 설정을 평가하지 않는다.
 기본 관리자를 선택할 때는 기존 명시적 names/spec 계약을 유지한다. 기본 관리자를 eager 생성하도록 되돌린
 mutation이 resolver 구성의 기동 성공 assertion으로 검출됐고 소스는 원본으로 복원했다.
+
+JPA는 소비자의 표준 EnableJpaRepositories가 Paper 전용 repositories 속성 없이 동작하는 것을 검증했다.
+특수 일괄 쓰기의 Spring JdbcTemplate 배치와 JPA 저장을 한 JpaTransactionManager로 실행해 함께
+commit·rollback되는 것도 확인했다. Jdbi의 별도 Handle 트랜잭션과 자동 결합된다는 뜻은 아니다.
+
+이벤트 Configurer는 prefix 그룹·Spring 빈 이름 참조·동일 타입의 두 인스턴스·비활성 참조·priority 범위와
+기존 어노테이션을 합친 순환을 검사했다. prefix 선택을 제거한 mutation이 독립 실행 순서 assertion으로 검출됐다.
+네이티브 예제도 새 Configurer를 사용한다. 앱에서 프록시 타입과 EventHandler 메타데이터를 해석할 필요가 없다.
 
 소비자 도입 중 initializer의 메인 스레드 실행과 worker refresh, 독립 stop phase와 placeholder,
 실패 정리 후 소비자 운영 정책, package-private factory 리스너의 동일 객체 재사용,
@@ -70,12 +78,12 @@ Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현
 서버 로그에서 확인한 결과:
 
 ```text
-13:11:46 SPRING_PAPER_CUSTOM_START
-13:11:49 SPRING_PAPER_SMOKE_OK
-13:12:55 SPRING_PAPER_SMOKE_OK  (sp 별칭)
-13:12:55 SPRING_PAPER_CUSTOM_STOP
-13:12:55 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
-13:12:55 SpringPaper - Shutdown completed.
+13:58:32 SPRING_PAPER_CUSTOM_START
+13:58:35 SPRING_PAPER_SMOKE_OK
+13:59:40 SPRING_PAPER_SMOKE_OK  (sp 별칭)
+13:59:40 SPRING_PAPER_CUSTOM_STOP
+13:59:40 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
+13:59:40 SpringPaper - Shutdown completed.
 ```
 
 smoke-success.txt:
@@ -124,13 +132,13 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 ## 배포물 소비와 최종 JAR
 
-build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 114개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
+build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 122개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 5a5d17a763a53fe282322a6948288ea7ce993a9321171c14189168718439f268
-- 크기: 40066516 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 47128c27c7362d9de90f8a92494f426bfc8f19513aaaafd6758765cd111ef1b3
+- 크기: 40075943 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), JPA·Cache·Security SPI 제공자 4개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 5f7267dc0f00345213c985746d69c960dd0699127c0f29c1e10cdbbb98497f15
+- 독립 Maven 소비 JAR SHA-256: 701cadbf9b667def69896a67a54e5f056627fa82e80743bf8bc14b1cdb71f3ea
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계
