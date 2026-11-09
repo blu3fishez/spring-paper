@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew check`와 `./gradlew assemble publishToMavenLocal`: 전체 빌드와 132개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew check assemble`: 전체 빌드와 136개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,14 +15,19 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 132개, 실패·오류·스킵 0.
+총 136개, 실패·오류·스킵 0.
+
+추가 회귀 검사에서 표준 FactoryBean으로 EMF만 제공하는 구성, 사용자 트랜잭션 관리자도 제공하는 구성,
+관련 없는 DataSource가 여러 개인 구성을 실제 H2 저장·조회·rollback으로 확인했다. 수정 전 세 경우가
+실패했고, 기존 EMF를 먼저 선택하고 FactoryBean 제품 타입을 조기 생성 없이 조회한 뒤 통과했다.
+일반 Component/Service를 애플리케이션 스캔에 추가하는 검사도 타입별 라이브러리 등록 없이 통과한다.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 7 |
 | spring-paper-config | 4 |
-| spring-paper-core | 59 |
-| spring-paper-data-jpa | 6 |
+| spring-paper-core | 60 |
+| spring-paper-data-jpa | 9 |
 | spring-paper-data-jdbc | 4 |
 | spring-paper-data-pdc | 10 |
 | spring-paper-gradle-plugin | 3 |
@@ -143,11 +148,11 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 136개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 4cb4e7586fa5b14591c0d0d5f53e3397e286ff97cc56893fc7b060ed23a303c4
-- 크기: 40096795 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 368f39c5844fb7b6184fc9c4c79219b535a0fac198048278a7cd6ba902f4eac7
+- 크기: 40096771 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), PDC·JPA·JDBC·Cache·Security SPI 제공자 5개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 66fa74c0f0e544bfc89ad0ee0a1a94cd26a0782cde4ddf4c640b1045bfe01f13
+- 독립 Maven 소비 JAR SHA-256: c02234eedb5543bc7474a8e4fca23d2ba6037bd25ff5b2015cc9b04beb44f856
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계

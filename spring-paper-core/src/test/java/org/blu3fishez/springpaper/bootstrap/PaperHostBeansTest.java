@@ -10,6 +10,7 @@ import org.blu3fishez.springpaper.annotation.SpringPaperPluginApplication;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.PaperServerInfo;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
+import org.blu3fishez.springpaper.fixture.composition.OrdinaryService;
 import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotatedBeanDefinitionReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ConfigurationClassPostProcessor;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -60,6 +62,7 @@ class PaperHostBeansTest {
                            PaperServerInfo info, PaperThreadAccess threads) {}
     @Configuration(proxyBeanMethods = false)
     @Import(PaperCoreConfiguration.class)
+    @ComponentScan(basePackageClasses = OrdinaryService.class)
     public static class Features {
         @Bean Consumer consumer(JavaPlugin plugin, Server server, Logger logger, PaperConfiguration configuration,
                 PaperServerInfo info, PaperThreadAccess threads) {
@@ -102,6 +105,14 @@ class PaperHostBeansTest {
             assertSame(second, b.context().getBean(JavaPlugin.class));
             assertNotSame(a.context().getBean(Server.class), b.context().getBean(Server.class));
             assertNotSame(a.context().getBean(PaperConfiguration.class), b.context().getBean(PaperConfiguration.class));
+        }
+    }
+
+    @Test void ordinaryComponentsUseStandardScanningAndConstructorInjection() {
+        try (var application = SpringPaperApplication.run(host())) {
+            var service = application.context().getBean(OrdinaryService.class);
+            assertEquals("Host:component", service.describe());
+            assertEquals(1, application.context().getBeansOfType(OrdinaryService.class).size());
         }
     }
 

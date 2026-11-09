@@ -40,6 +40,12 @@ public class MyPluginConfiguration {
 
 `JavaPlugin`, `Server`, `Logger`, `PaperConfiguration`, `PaperServerInfo`, `PaperThreadAccess`의 빈 정의를 제공한다. bootstrap에서 자동 등록하는 동일 구성에 연결되며, 호스트 객체와 컨텍스트를 추가로 만들지 않는다.
 
+일반 서비스는 이 애플리케이션 구성의 제한된 `@ComponentScan`에서 표준 `@Component`·`@Service`로 발견한다.
+새 서비스마다 라이브러리의 타입 목록이나 등록 분기를 추가하지 않는다. 선택 모듈의 공개 구성은 앱 루트에서
+`@Import`하고, 활성화 조건은 제공자가 소유한다. IDE의 다중 모듈 컨텍스트 연결은 실제 루트 구성을 기준으로
+맞춘다. IDE 가시성을 위해 공유 모듈이 구현 의존성을 `api`로 전파하지 않는다.
+임의의 initializer·ServiceLoader 실행 결과 전체를 IDE가 정적으로 추론한다고 보장하지 않는다.
+
 ## 이벤트와 명령
 
 ```java

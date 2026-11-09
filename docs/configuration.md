@@ -117,6 +117,10 @@ repositories/entities는 제한된 패키지 목록 또는 쉼표 구분 문자�
 필요 없다. 해당 속성을 명시하면 기존 YAML 스캔을 사용한다. 직접 제공한 EntityManagerFactory에서는
 엔티티 패키지와 Flyway 완료 의존성도 소비자의 표준 Spring 구성으로 지정할 수 있다.
 
+기존 EMF를 선택하면 DataSource 빈·URL·선택 설정은 요구하지 않는다. EMF가 내부 풀이나 JNDI/JTA 자원을
+소유할 수도 있기 때문이다. 기본 EMF가 필요할 때만 DataSource 선택과 기본 풀 구성을 수행한다.
+표준 `LocalContainerEntityManagerFactoryBean`의 제품 타입도 조기 초기화 없이 발견해 재사용한다.
+
 - `spring.paper.jpa.data-source-bean`
 - `spring.paper.jpa.entity-manager-factory-bean`
 - `spring.paper.jpa.transaction-manager-bean`

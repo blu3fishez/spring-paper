@@ -29,18 +29,23 @@ public class JpaConfiguration {
     @Bean public static BeanFactoryPostProcessor springPaperJpaInfrastructure(PaperConfiguration properties) {
         return factory -> {
             BeanDefinitionRegistry registry = (BeanDefinitionRegistry) factory;
-            String[] sources = factory.getBeanNamesForType(DataSource.class, false, false);
-            String source;
-            if (sources.length == 0) {
-                source = "springPaperDataSource";
-                RootBeanDefinition definition = new RootBeanDefinition(HikariDataSource.class,
-                        () -> createDataSource(properties));
-                definition.setDestroyMethodName("close");
-                registry.registerBeanDefinition(source, definition);
-            } else source = choose(properties, "spring.paper.jpa.data-source-bean", sources);
-
-            String[] factories = factory.getBeanNamesForType(EntityManagerFactory.class, false, false);
+            // FactoryBean 제품의 singleton 여부는 초기화 전 확정되지 않을 수 있다. singleton으로
+            // 조회를 제한하면 표준 LocalContainerEntityManagerFactoryBean 선언도 누락되므로,
+            // 조기 생성 없이 Spring이 예측한 제품 타입으로 소비자 정의를 먼저 찾는다.
+            String[] factories = factory.getBeanNamesForType(EntityManagerFactory.class, true, false);
             if (factories.length == 0 && !registry.containsBeanDefinition("entityManagerFactory")) {
+                // 소비자의 EMF는 자체 DataSource/JNDI/JTA 구성을 소유할 수 있다. 먼저 풀을 만들면
+                // 사용하지 않을 URL을 강제하거나 관련 없는 다중 DataSource 선택 때문에 시작이 실패한다.
+                // 기본 EMF를 실제로 생성하는 경로에서만 기본 풀과 DataSource 선택을 준비한다.
+                String[] sources = factory.getBeanNamesForType(DataSource.class, false, false);
+                String source;
+                if (sources.length == 0) {
+                    source = "springPaperDataSource";
+                    RootBeanDefinition definition = new RootBeanDefinition(HikariDataSource.class,
+                            () -> createDataSource(properties));
+                    definition.setDestroyMethodName("close");
+                    registry.registerBeanDefinition(source, definition);
+                } else source = choose(properties, "spring.paper.jpa.data-source-bean", sources);
                 List<String> packages = properties.strings("spring.paper.jpa.entities");
                 if (packages.isEmpty()) throw new IllegalArgumentException("spring.paper.jpa.entities is required");
                 var values = new LinkedHashMap<String, Object>(properties.children("spring.paper.jpa.properties"));
