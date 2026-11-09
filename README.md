@@ -28,6 +28,18 @@ public final class MyPlugin extends SpringPaperPlugin {}
 
 진입점 어노테이션 자체는 Spring component가 아니다. Paper가 만든 객체를 컨텍스트에 등록하며, Spring이 `JavaPlugin`을 다시 생성하지 않는다. 기능별 설정에서 제한된 스캔·`@Import`·`@Bean`을 사용한다. 서버 역할·인증 모드별 구현을 전체 패키지 스캔으로 동시에 등록하지 않는다.
 
+애플리케이션 구성에 코어 구성을 명시하면 IDEA의 Spring 모델도 호스트 빈의 타입을 인식한다.
+
+```java
+@Configuration(proxyBeanMethods = false)
+@Import(PaperCoreConfiguration.class)
+public class MyPluginConfiguration {
+    // 기능별 @Import, @ComponentScan, @Bean
+}
+```
+
+`JavaPlugin`, `Server`, `Logger`, `PaperConfiguration`, `PaperServerInfo`, `PaperThreadAccess`의 빈 정의를 제공한다. bootstrap에서 자동 등록하는 동일 구성에 연결되며, 호스트 객체와 컨텍스트를 추가로 만들지 않는다.
+
 ## 이벤트와 명령
 
 ```java

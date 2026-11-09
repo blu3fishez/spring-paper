@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew build`: 전체 빌드와 128개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew check`와 `./gradlew assemble publishToMavenLocal`: 전체 빌드와 132개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,13 +15,13 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 128개, 실패·오류·스킵 0.
+총 132개, 실패·오류·스킵 0.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 7 |
 | spring-paper-config | 4 |
-| spring-paper-core | 55 |
+| spring-paper-core | 59 |
 | spring-paper-data-jpa | 6 |
 | spring-paper-data-jdbc | 4 |
 | spring-paper-data-pdc | 10 |
@@ -32,6 +32,13 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 실제 H2 어댑터에서 JPA 저장·재조회·revision·rollback과 기존 DataSource 재사용을 확인했다. JDBC 전용 classpath에는 JPA가 없고, 소비자의 JdbcOperations/JdbcClient 빈을 유지한다. 두 모듈을 양쪽 등록 순서로 활성화해도 풀과 JPA 트랜잭션 매니저는 각각 하나이며 JPA 쓰기를 JDBC로 읽은 뒤 함께 롤백한다. 메인 스레드 트랜잭션 시작 거절도 검사했다. Cache는 실제 Spring proxy와 commit/rollback에 따른 변경을, Security는 실제 메서드 인가 proxy의 허용·거절·문맥 복원을 확인했다.
 
 Paper 입력·생명주기 자동 검사는 Paper API 타입과 mock host를 사용한다. 실제 Bukkit 명령 객체의 실행기/탭 완성 연결·복구, 이벤트 등록 옵션, 종료 후 콜백 차단, 상속 override, 부분 시작 실패 정리, 워커 drain을 검증했다. PaperStop과 AutoCloseable 추론 종료 및 명시적 destroyMethod가 겹쳐도 종료 소유자는 한 번만 실행된다.
+
+호스트 빈은 객체 생성 전 타입 탐색, 초기화기와 소비자의 동일 plugin 참조, 구체적인 plugin 타입 주입,
+외부 객체의 Spring 초기화·종료 제외, 컨텍스트 격리와 예약 이름 재정의 거절을 검사했다.
+수정 전에는 타입 정의와 실제 빈 정의 존재 assertion이 실패했다. 수정 후에는 4개 회귀 검사가 통과한다.
+실제 IDEA에서도 SimpleExtraction의 TraceRecoveryService에 표시되던
+`Could not autowire. No beans of 'JavaPlugin' type found.`를 재현했고, 코어 구성 import와 typed 빈 선언 적용 후
+동일 파일의 Problems가 `No problems`로 바뀌었다. IDE 설정 변경과 검사 억제는 사용하지 않았다.
 
 Cache는 Spring 표준 CacheManager 빈 재사용, Cacheable/CachePut/CacheEvict의 같은 키 갱신·무효화,
 CachingConfigurer의 CacheResolver·KeyGenerator를 실제 Spring 컨텍스트로 검증했다.
@@ -124,6 +131,7 @@ event-order=annotation+composition
 | 배포 검증 제약 | 같은 SNAPSHOT의 캐시는 예전 배포물을 검증하게 할 수 있다. 최초 소비를 refresh하고 모든 자체 클래스 bytecode를 대조한다. | [verify-published-consumer.py](../scripts/verify-published-consumer.py) |
 | 실행 승인 대기, 해소됨 | 서버 실행 허용과 EULA 수락을 따로 확인했다. 명시적 수락 후 로컬 설정만 true로 실행했다. | [PreparePaperServer.prepare](../spring-paper-gradle-plugin/src/main/java/org/blu3fishez/springpaper/gradle/PreparePaperServer.java) |
 | 설계 제약 | 진입점을 Component로 스캔하면 JavaPlugin을 재생성한다. 기존 인스턴스 등록과 사용자 구성 등록을 나눈다. | [SpringPaperPluginApplication](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/annotation/SpringPaperPluginApplication.java) |
+| IDEA 호스트 빈 미인식 | 런타임 singleton 등록만으로는 IDE에 타입 정의가 없었다. typed @Bean과 정적 import를 제공한다. 같은 이름의 정의를 파싱할 때 singleton이 reset되므로 파싱 뒤 원래 객체를 다시 연결해 초기화기 참조와 Paper 소유권을 보존한다. | [PaperCoreConfiguration](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/bootstrap/PaperCoreConfiguration.java), [PaperHostBeansTest](../spring-paper-core/src/test/java/org/blu3fishez/springpaper/bootstrap/PaperHostBeansTest.java) |
 | 설계 제약 | 원본 target 호출은 인가/트랜잭션 advice를 우회한다. 프록시에 호출 가능한 메서드만 연결한다. 공유 스레드의 TCCL은 호출 범위에서 설정·복원한다. | [PaperListenerRegistrar](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/listener/PaperListenerRegistrar.java), [PaperInvocationService](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/service/PaperInvocationService.java) |
 | 설계 제약 | 메인 스레드에서 종료 대기 중 queued main callback은 실행되지 않는다. pending future를 먼저 실패시키고 워커를 기다린다. | [PaperTasks.close](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/task/PaperTasks.java) |
 
@@ -135,11 +143,11 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 136개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 2172f4ba0c67244e40145545838dccf78f4f35545a6c4f6385d46d959c24ee8e
-- 크기: 40094942 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 4cb4e7586fa5b14591c0d0d5f53e3397e286ff97cc56893fc7b060ed23a303c4
+- 크기: 40096795 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
-- 프로젝트 클래스 major 69 (Java 25), JPA·Cache·Security SPI 제공자 4개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 0079372a5cbe52aae307fd2225280da41aff09b2f32307a001f165f17b4c9562
+- 프로젝트 클래스 major 69 (Java 25), PDC·JPA·JDBC·Cache·Security SPI 제공자 5개 병합 보존
+- 독립 Maven 소비 JAR SHA-256: 66fa74c0f0e544bfc89ad0ee0a1a94cd26a0782cde4ddf4c640b1045bfe01f13
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계

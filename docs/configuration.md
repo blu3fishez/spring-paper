@@ -192,6 +192,13 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 
 진입점의 `initializers`는 Spring 표준 `ApplicationContextInitializer<ConfigurableApplicationContext>` 목록이다. Paper 메인 스레드에서 기존 host 설정을 읽거나 immutable singleton·PropertySource를 넣고, 이후 작업자 refresh에 전달한다. initializer 자체를 Spring component로 재생성하거나 별도 DI 컨테이너로 만들지 않는다.
 
+애플리케이션의 `@Configuration`에 `@Import(PaperCoreConfiguration.class)`를 선언하면 IDE도
+코어의 타입이 명시된 호스트 `@Bean`을 따라갈 수 있다. `JavaPlugin`을 Spring component로 스캔하지 않는다.
+bootstrap은 같은 코어 구성을 등록하고 Paper가 만든 plugin/server/logger를 초기화기 실행 전에 노출한다.
+Spring 7은 같은 이름의 빈 정의를 읽을 때 기존 singleton을 reset하므로, 구성 파싱 뒤 같은 외부 객체를
+다시 연결한다. 이 객체는 Spring의 초기화·AOP·종료 처리를 거치지 않으며 Paper가 계속 소유한다.
+`PaperCoreConfiguration.registerHost`는 직접 컨텍스트를 조립하는 검증 코드에서도 같은 계약을 제공한다.
+
 `@PaperEventListener`는 타입과 `@Bean` 메서드에서 사용할 수 있다. 기존 소유 객체가 만든 리스너를 factory로 노출하면 캡처한 세션과 callback을 공유한다. 입력 등록/해제는 Spring Paper가 소유하고, 소유 객체가 내부 작업을 닫는다면 factory에 `destroyMethod=""`를 지정한다. 실제 factory method와 타입의 어노테이션 조회 및 순서는 Spring BeanFactory의 표준 계약을 사용한다.
 
 `@PaperCommandExecutor`는 반복 선언할 수 있다. 레이블마다 다른 usage·permission 메타데이터를 생성하며 실행 객체는 하나다. 진입점 `permissions`는 `@PaperPermission(name=..., description=..., defaultValue=...)` 배열로 명령 밖의 권한도 선언한다. 같은 권한의 충돌하는 기본값은 빌드 오류다.

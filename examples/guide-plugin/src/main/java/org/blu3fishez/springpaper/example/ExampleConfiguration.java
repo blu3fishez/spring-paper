@@ -2,6 +2,8 @@ package org.blu3fishez.springpaper.example;
 
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.blu3fishez.springpaper.bootstrap.PaperCoreConfiguration;
 import org.blu3fishez.springpaper.pdc.EnablePaperPdcRepositories;
 import org.blu3fishez.springpaper.example.listener.ExampleAfterListener;
 import org.blu3fishez.springpaper.example.listener.ExampleConfiguredListener;
@@ -14,6 +16,7 @@ import org.blu3fishez.springpaper.example.service.ExampleLifecycleProbe;
 import org.blu3fishez.springpaper.example.service.ExampleLifecycleService;
 
 @Configuration(proxyBeanMethods = false)
+@Import(PaperCoreConfiguration.class)
 @ComponentScan(basePackageClasses = ExampleConfiguration.class)
 @EnablePaperPdcRepositories(basePackageClasses = ExampleConfiguration.class)
 public class ExampleConfiguration {

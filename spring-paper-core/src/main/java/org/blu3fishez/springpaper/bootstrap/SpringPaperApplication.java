@@ -17,7 +17,6 @@ import org.blu3fishez.springpaper.annotation.SpringPaperPluginApplication;
 import org.blu3fishez.springpaper.command.PaperCommandRegistrar;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.PaperEnvironment;
-import org.blu3fishez.springpaper.config.PaperServerInfo;
 import org.blu3fishez.springpaper.lifecycle.PaperLifecycleManager;
 import org.blu3fishez.springpaper.listener.PaperListenerRegistrar;
 import org.blu3fishez.springpaper.listener.PaperEventOrderRegistry;
@@ -26,7 +25,6 @@ import org.blu3fishez.springpaper.spi.PaperInvocationInterceptor;
 import org.blu3fishez.springpaper.spi.PaperEventOrderContributor;
 import org.blu3fishez.springpaper.spi.PaperEventOrderConfigurer;
 import org.blu3fishez.springpaper.spi.SpringPaperModule;
-import org.blu3fishez.springpaper.spi.PaperThreadAccess;
 import org.blu3fishez.springpaper.task.PaperTasks;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -68,22 +66,13 @@ public final class SpringPaperApplication implements AutoCloseable {
         context.setEnvironment(PaperEnvironment.load(plugin, annotation.configuration()));
         PaperConfiguration configuration = new PaperConfiguration(context.getEnvironment());
         var factory = context.getBeanFactory();
-        factory.registerSingleton("paperPlugin", plugin);
-        factory.registerSingleton("paperServer", plugin.getServer());
-        factory.registerSingleton("paperLogger", plugin.getLogger());
-        factory.registerSingleton("paperConfiguration", configuration);
-        factory.registerSingleton("paperServerInfo", new PaperServerInfo(plugin.getServer().getMinecraftVersion(),
-                plugin.getServer().getBukkitVersion(), plugin.getServer().getVersion(), Runtime.version().toString()));
-        factory.registerSingleton("paperThreadAccess", (PaperThreadAccess) () -> plugin.getServer().isPrimaryThread());
+        PaperCoreConfiguration.registerHost(context, plugin, configuration);
         // 기존 Bukkit 설정의 검증/host 객체 캡처는 Paper thread에서 끝내고 refresh worker에 값으로 전달한다.
         // Spring의 표준 initializer를 사용하며 initializer 자체를 별도 컨테이너/서비스 로케이터로 만들지 않는다.
         for (var initializer : annotation.initializers()) {
             org.springframework.beans.BeanUtils.instantiateClass(initializer).initialize(context);
         }
         context.addBeanFactoryPostProcessor(beans -> {
-            for (String reserved : java.util.List.of("paperPlugin", "paperServer", "paperLogger", "paperConfiguration", "paperServerInfo", "paperThreadAccess")) {
-                if (beans.containsBeanDefinition(reserved)) throw new IllegalArgumentException("Reserved Spring Paper bean name: " + reserved);
-            }
             for (String name : beans.getBeanDefinitionNames()) {
                 Class<?> type = beans.getType(name, false);
                 if (type == null) continue;
@@ -97,7 +86,6 @@ public final class SpringPaperApplication implements AutoCloseable {
                 }
             }
         });
-        context.register(PaperCoreConfiguration.class);
         context.register(annotation.configurations());
         Arrays.stream(annotation.scanBasePackageClasses()).map(Class::getPackageName).distinct().forEach(context::scan);
         ServiceLoader.load(SpringPaperModule.class, loader).forEach(module -> {
