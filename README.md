@@ -113,6 +113,11 @@ spring:
 
 ## 선택적 Spring 생태계
 
+Spring Paper는 Paper 호스트를 표준 Spring ApplicationContext에 연결한다. 기존 Spring 라이브러리는
+의존성을 추가하고 같은 컨텍스트에 표준 Configuration·빈을 등록해 사용한다. 각 선택 모듈은
+해당 생태계의 기본 구성과 Paper 연결을 제공한다. 어노테이션·저장소·인가 처리는 Spring 구현에 맡긴다.
+Spring Boot 런타임과 starter 자동 구성은 사용하지 않는다.
+
 | 모듈 | 제공 기능 | 활성화 |
 |---|---|---|
 | `spring-paper-data-jpa` | Spring Data JPA 저장소, Hibernate, 트랜잭션, Hikari 기본 구성, 기존 자원 재사용 | `spring.paper.jpa.enabled` |
@@ -124,6 +129,12 @@ spring:
 YAML 자동 구성에는 모듈 JAR과 enabled가 필요하다. PDC의 명시적인 Enable 어노테이션은 해당 구성에서 직접 활성화한다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
 
 PDC 저장소의 [사용법과 저장 계약](docs/configuration.md#pdc)을 참고한다. 기존 키·UUID 문자열·숫자 타입을 선언으로 매핑하고, 아이템 변경 반영과 관련 없는 키 보존은 모듈이 맡는다. 게임 규칙·스키마 이관·엔티티 조회는 소비자가 소유한다.
+
+Cache는 `org.springframework.cache.annotation`의 `@Cacheable`, `@CachePut`, `@CacheEvict`를
+서비스 메서드에 직접 사용한다. 모듈이 `@EnableCaching`을 연결하고 Spring이 프록시·키·표현식·무효화를 처리한다.
+소비자의 `CacheManager` 빈 또는 `CachingConfigurer`의 CacheResolver·KeyGenerator를 그대로 사용한다.
+Caffeine names/spec은 기본 제공자를 선택할 때만 필요하다. [실제 Cacheable 사용 예제](examples/guide-plugin/src/main/java/org/blu3fishez/springpaper/example/service/NoteService.java)와
+[표준 Spring 구성 연결](docs/configuration.md#cache)을 참고한다.
 
 라이브러리는 Lombok 1.18.48을 컴파일 전용으로 사용한다. 소비 코드에서 생성자 생성을 쓰려면 같은 버전을 `compileOnly`와 `annotationProcessor`에 추가한다. 런타임 JAR에 Lombok을 포함하지 않는다. 단순 필드 대입을 생성하고 검증·키 생성·자원 획득이 있는 생성자는 유지한다.
 

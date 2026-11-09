@@ -112,6 +112,12 @@ JPA/JDBC/Jdbi가 같은 DB를 사용한다는 사실만으로 같은 트랜잭�
 
 ## Cache
 
+`spring-paper-cache`는 Spring Cache 어노테이션 처리를 활성화한다. 소비자는 Spring 원본의
+`@Cacheable`·`@CachePut`·`@CacheEvict`·`@Caching`을 사용한다. AOP 처리와 표현식·키 생성·캐시 선택은
+Spring이 소유한다. 이 모듈은 기본 CacheManager 연결만 보완하며 Paper 스레드 전환을 수행하지 않는다.
+
+기본 제공자를 사용하는 설정 예시:
+
 ```yaml
 spring:
   paper:
@@ -121,7 +127,25 @@ spring:
       spec: 'maximumSize=1000,expireAfterWrite=5m'
 ```
 
-CacheManager를 직접 제공하면 재사용한다. 없으면 명시한 names/spec으로 Caffeine을 만들고 TransactionAwareCacheManagerProxy로 감싼다. commit 전 put/evict는 지연하고 rollback된 변경은 캐시에 적용하지 않는다. putIfAbsent 같은 즉시 실행 연산은 별도 Spring 계약을 따른다.
+기존 Spring 서비스의 메서드에 어노테이션을 붙이고 주입받은 빈을 통해 호출한다.
+[예제 NoteService](../examples/guide-plugin/src/main/java/org/blu3fishez/springpaper/example/service/NoteService.java)도 같은 방식을 사용한다.
+
+```java
+import org.springframework.cache.annotation.Cacheable;
+
+@Cacheable("notes")
+public String read(long id) {
+    return notes.findById(id).orElseThrow().text();
+}
+```
+
+CacheManager 빈을 직접 제공하면 기본 관리자 등록을 생략한다. Spring의 `CachingConfigurer`로
+CacheResolver·KeyGenerator·CacheErrorHandler를 선택할 수도 있다. 표준 설정의 선택·검증은 Spring에 맡긴다.
+사용하지 않는 기본 제공자의 설정은 요구하지 않는다. 따라서 자체 CacheManager 또는
+CachingConfigurer의 CacheResolver를 사용하면 위 YAML의 names/spec이 필요 없다.
+
+Spring이 기본 관리자를 실제 선택하면 명시한 names/spec으로 Caffeine을 만들고 TransactionAwareCacheManagerProxy로 감싼다.
+commit 전 put/evict는 지연하고 rollback된 변경은 캐시에 적용하지 않는다. putIfAbsent 같은 즉시 실행 연산은 별도 Spring 계약을 따른다.
 
 Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자동 연결·서버 간 무효화·durable outbox는 현재 제공하지 않는다. TTL은 권위 있는 인벤토리 상태의 소유권이나 중복 지급 방지 규칙을 대체하지 않는다.
 
@@ -181,6 +205,7 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | [AbstractApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java) | refresh 실패의 singleton 정리와 컨텍스트 destruction은 Spring이 소유한다. 메인 스레드 사용자 훅과 입력 해제·워커 drain 순서만 SpringPaperApplication이 그 바깥에서 조정한다. |
 | [AbstractPlatformTransactionManager](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java) | beforeBegin이 doBegin보다 먼저 실행되는 공식 listener로 메인 스레드 DB 작업을 차단한다. 트랜잭션 구현은 JpaTransactionManager에 위임한다. |
 | [TransactionAwareCacheDecorator](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context-support/src/main/java/org/springframework/cache/transaction/TransactionAwareCacheDecorator.java) | put/evict/clear의 afterCommit 반영을 Spring에 위임한다. 자체 트랜잭션 캐시 동기화기를 만들지 않는다. |
+| [AbstractCachingConfiguration](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/cache/annotation/AbstractCachingConfiguration.java), [CacheAspectSupport](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/cache/interceptor/CacheAspectSupport.java) | CachingConfigurer의 지연 선택과 CacheResolver/KeyGenerator/ErrorHandler 처리를 재사용한다. 기본 제공자는 Spring이 필요로 할 때만 생성해 소비자의 표준 설정을 막지 않는다. |
 | [AuthorizationManagerBeforeMethodInterceptor](https://github.com/spring-projects/spring-security/blob/7.1.2/core/src/main/java/org/springframework/security/authorization/method/AuthorizationManagerBeforeMethodInterceptor.java), [DelegatingSecurityContextRunnable](https://github.com/spring-projects/spring-security/blob/7.1.2/core/src/main/java/org/springframework/security/concurrent/DelegatingSecurityContextRunnable.java) | 메서드 인가는 Spring Security가 처리한다. Paper 어댑터는 호출별 불변 사용자 정보와 finally 문맥 복원만 담당하며 작업자 문맥 전달은 Spring의 명시적 wrapper에 맡긴다. |
 
 실제 장애·회귀·실행 승인 대기 이력과 관련 소스 위치는 [검증 기록](verification.md#막혔던-지점과-코드-주석)에서 확인할 수 있다.
