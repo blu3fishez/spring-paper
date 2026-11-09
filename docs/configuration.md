@@ -157,6 +157,8 @@ Redis CacheManager도 소비자 설정에서 제공할 수 있으나 Redis 자�
 
 SpringPaperModule SPI는 코어가 호출하고 선택 모듈이 구현한다. META-INF/services 등록과 enabledProperty/configurationClass를 제공하면 활성화된 모듈 구성만 컨텍스트에 들어온다. provider 생성자는 I/O와 자원 생성을 하지 않는다.
 
+PaperEventOrderContributor SPI는 소비자의 최상위 구성 모듈이 구현하고 코어가 native 등록 전에 한 번 호출한다. 반환한 PaperEventRelation의 event·priority 범위에서 before/after를 메서드 관계와 같은 그래프에 합친다. 다른 역할에서 빠진 리스너를 생성하지 않으며, 순환이면 등록 전에 실패한다. 기능 구현끼리 순서 때문에 의존하도록 만들지 않는다.
+
 PaperInvocationInterceptor SPI는 코어의 이벤트·명령·탭 완성 경로를 감싼다. Spring orderedStream 순서를 따른다. 실제 빈은 생성자 주입하며, 어노테이션을 읽기 위해 프록시를 벗겨 원본을 호출하지 않는다.
 
 컨텍스트 준비, 사용자 start/stop, 입력 호출과 PaperTasks 작업은 플러그인의 문맥 클래스 로더를 사용하고 이전 로더를 복원한다. 다른 플러그인의 컨텍스트나 전역 정적 컨텍스트를 재사용하지 않는다.

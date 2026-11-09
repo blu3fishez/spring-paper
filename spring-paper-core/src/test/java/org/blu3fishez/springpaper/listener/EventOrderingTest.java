@@ -33,6 +33,11 @@ class EventOrderingTest {
         @EventHandler(priority = EventPriority.HIGHEST)
         public void damage(Damage event) { calls.add("counter"); }
     }
+    public static class ConfiguredCounter extends Counter {
+        ConfiguredCounter(List<String> calls) { super(calls); }
+        @Override @EventHandler(priority = EventPriority.HIGHEST)
+        public void damage(Damage event) { calls.add("counter"); }
+    }
     public static class ChildDamage extends Damage {}
     public static class ChildHandler implements Listener {
         final List<String> calls;
@@ -158,6 +163,30 @@ class EventOrderingTest {
             registrar.registerAll(List.of(new PaperListenerRegistrar.Candidate("counter", new Counter(calls), Counter.class)));
             host.callbacks.getFirst().execute(null, new Damage());
             assertEquals(List.of("counter"), calls);
+        }
+    }
+
+    @Test void compositionCanOrderSeparateFeaturesWithoutAnnotationsOnTheirImplementations() throws Exception {
+        var host = new Host();
+        List<String> calls = new ArrayList<>();
+        try (var registrar = host.registrar()) {
+            registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("counter", new ConfiguredCounter(calls), ConfiguredCounter.class),
+                    new PaperListenerRegistrar.Candidate("armor", new Armor(calls), Armor.class)),
+                    List.of(new PaperEventRelation(Damage.class, EventPriority.HIGHEST, Armor.class, ConfiguredCounter.class)));
+            for (var callback : host.callbacks) callback.execute(null, new Damage());
+            assertEquals(List.of("armor", "counter"), calls);
+        }
+    }
+
+    @Test void detectsACycleAcrossAnnotationAndCompositionBeforeNativeRegistration() {
+        var host = new Host();
+        try (var registrar = host.registrar()) {
+            assertThrows(IllegalArgumentException.class, () -> registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("armor", new Armor(new ArrayList<>()), Armor.class),
+                    new PaperListenerRegistrar.Candidate("counter", new Counter(new ArrayList<>()), Counter.class)),
+                    List.of(new PaperEventRelation(Damage.class, EventPriority.HIGHEST, Counter.class, Armor.class))));
+            verifyNoInteractions(host.manager);
         }
     }
 }

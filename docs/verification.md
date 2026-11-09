@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew build`: 전체 빌드와 96개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew build`: 전체 빌드와 98개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,13 +15,13 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 96개, 실패·오류·스킵 0.
+총 98개, 실패·오류·스킵 0.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 2 |
 | spring-paper-config | 4 |
-| spring-paper-core | 35 |
+| spring-paper-core | 37 |
 | spring-paper-data-jpa | 3 |
 | spring-paper-data-pdc | 10 |
 | spring-paper-gradle-plugin | 3 |
@@ -64,12 +64,12 @@ Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현
 서버 로그에서 확인한 결과:
 
 ```text
-11:56:12 SPRING_PAPER_CUSTOM_START
-11:56:15 SPRING_PAPER_SMOKE_OK
-11:56:49 SPRING_PAPER_SMOKE_OK  (sp 별칭)
-11:56:55 SPRING_PAPER_CUSTOM_STOP
-11:56:55 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
-11:56:55 SpringPaper - Shutdown completed.
+12:41:00 SPRING_PAPER_CUSTOM_START
+12:41:03 SPRING_PAPER_SMOKE_OK
+12:41:08 SPRING_PAPER_SMOKE_OK  (sp 별칭)
+12:41:19 SPRING_PAPER_CUSTOM_STOP
+12:41:19 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
+12:41:19 SpringPaper - Shutdown completed.
 ```
 
 smoke-success.txt:
@@ -82,7 +82,7 @@ pdc=entity+item+legacy+clone+remove
 jpa=committed
 cache=hit
 event=1
-event-order=relation
+event-order=annotation+composition
 ```
 
 네이티브 로그 원본은 로컬 examples/guide-plugin/run/logs/latest.log에 있고, 주요 로그와 판정은 [JSON 요약](verification-summary.json)에 보존했다. run 디렉터리와 로컬 EULA 설정은 Git에 포함하지 않는다.
@@ -117,13 +117,13 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 ## 배포물 소비와 최종 JAR
 
-build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 112개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
+build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 114개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 85eebeb76d613396522fdf2fe48f56fc675d8e86d1be0ee65128a89fdac5062a
-- 크기: 40062161 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: a92166be721fcc649e17b40e3acf96edd9eda134863589c967a87d8a391a89b5
+- 크기: 40066164 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), JPA·Cache·Security SPI 제공자 4개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 651abbe0509c571630c6f03d71519d966f508872ee043a35272c9422f444220d
+- 독립 Maven 소비 JAR SHA-256: 6bb0476726379e889d8d9601e5654068faa8f9ea3d816dc7424a956accfa0721
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계
@@ -140,7 +140,7 @@ build/verification-repository의 Maven 플러그인 marker와 모듈만으로 �
 - 기존 LONG·UUID STRING 읽기, absence/부분 누락/타입 오류/변환 오류의 구분, custom PersistentDataType 빈, record 검증, 읽기 무변경을 확인했다.
 - 아이템 변경 반영·복사본 분리·선택 필드 삭제·다른 키/ItemMeta 보존을 실제 Paper에서도 확인했다. 작업자 접근은 holder를 읽기 전에 거절한다.
 - 마지막 codec 실패 전에 live 엔티티를 쓰도록 바꾼 mutation이 assertion 실패로 검출됐다. 명시 관계를 무시하도록 바꾼 mutation도 검출됐고 두 소스 모두 바이트 단위로 복원했다.
-- 이벤트 관계는 메서드·native HandlerList·priority 기준이다. 상속 이벤트의 공유 목록, 비활성 역할, 무관한 목록 사이의 가짜 순환 방지, 실제 순환과 native 우선순위 모순을 검사했다.
+- 이벤트 관계는 메서드·native HandlerList·priority 기준이다. 상속 이벤트의 공유 목록, 비활성 역할, 무관한 목록 사이의 가짜 순환 방지, 실제 순환과 native 우선순위 모순을 검사했다. 최상위 구성 SPI와 어노테이션을 합친 순환도 등록 전에 거절하며, 구성 관계를 비활성화한 mutation이 독립 순서 assertion으로 검출됐다.
 - Lombok은 1.18.48 compileOnly/annotationProcessor다. 생성자·접근자 전환 전후 123개 클래스의 공개/패키지 메서드·필드 표면을 javap로 대조해 차이가 없었다. 검증/자원 획득 생성자는 유지했다.
 - delombok 결과로 Javadoc을 만들어 생성된 생성자/접근자를 문서화하고 sources JAR에 lombok.config를 포함했다. 배포물과 예제에 Lombok 런타임 클래스는 없다.
 
@@ -149,4 +149,4 @@ PDC의 원인은 [PdcRecordMapper](../spring-paper-data-pdc/src/main/java/org/bl
 [FactoryBean/Registrar](../spring-paper-data-pdc/src/main/java/org/blu3fishez/springpaper/pdc/internal/PdcRepositoriesRegistrar.java)의 타입 발견 주석에 남겼다.
 전역 숫자 순서와 상속 이벤트 문제는 [PaperEventPlan](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/listener/PaperEventPlan.java)의 native HandlerList 주석에 기록했다.
 
-GitHub 첫 push는 GH007(비공개 작성자 메일 보호)로 거절됐다. 공개 GitHub 계정 ID로 확인한 noreply 주소를 이 미게시 커밋에만 적용해 재시도했으며 전역 Git·계정 설정은 변경하지 않았다.
+GitHub 첫 push는 GH007(비공개 작성자 메일 보호)로 거절됐다. 공개 GitHub 계정 ID로 확인한 noreply 주소로 미게시 커밋을 고쳐 재시도했다. 이후 사용자의 명시적 요청으로 이 spring-paper 저장소의 로컬 user.email도 같은 주소로 설정했다. 전역 Git·다른 저장소·계정 설정은 변경하지 않았다.

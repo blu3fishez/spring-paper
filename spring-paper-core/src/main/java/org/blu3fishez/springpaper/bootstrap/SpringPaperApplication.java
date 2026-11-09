@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.ServiceLoader;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -22,6 +23,7 @@ import org.blu3fishez.springpaper.lifecycle.PaperLifecycleManager;
 import org.blu3fishez.springpaper.listener.PaperListenerRegistrar;
 import org.blu3fishez.springpaper.service.PaperInvocationService;
 import org.blu3fishez.springpaper.spi.PaperInvocationInterceptor;
+import org.blu3fishez.springpaper.spi.PaperEventOrderContributor;
 import org.blu3fishez.springpaper.spi.SpringPaperModule;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
 import org.blu3fishez.springpaper.task.PaperTasks;
@@ -128,7 +130,9 @@ public final class SpringPaperApplication implements AutoCloseable {
         // Event relationships require the complete active batch, not one global number on every listener.
         listeners.registerAll(adapters.stream()
                 .filter(entry -> factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null)
-                .map(entry -> new PaperListenerRegistrar.Candidate(entry.name, entry.bean, entry.type)).toList());
+                .map(entry -> new PaperListenerRegistrar.Candidate(entry.name, entry.bean, entry.type)).toList(),
+                context.getBeanProvider(PaperEventOrderContributor.class).orderedStream()
+                        .flatMap(contributor -> List.copyOf(contributor.relations()).stream()).toList());
         adapters.forEach(entry -> {
             for (PaperCommandExecutor command : AnnotatedElementUtils.getMergedRepeatableAnnotations(entry.type, PaperCommandExecutor.class)) {
                 commands.register(entry.name, entry.bean, command);

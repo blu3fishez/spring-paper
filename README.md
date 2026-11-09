@@ -59,6 +59,8 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 
 실제로 순서가 필요한 메서드만 `@PaperEventOrder(after = ArmorListener.class)` 또는 `before`를 선언한다. 같은 native HandlerList의 같은 우선순위 안에서 관계를 정렬한다. 상속 이벤트가 처리 목록을 공유하는 경우도 포함한다. Paper의 EventPriority와 모순되거나 순환하는 관계는 입력 등록 전에 거절한다. 비활성 역할의 리스너는 필수 의존성이 되지 않는다.
 
+서로 다른 기능의 구현 사이에 의존성을 만들 수 없는 관계는 최상위 `@Configuration`에서 `PaperEventOrderContributor` 빈으로 제공한다. `PaperEventRelation(event, priority, before, after)`는 같은 native 목록과 우선순위 안에만 적용되며, 메서드 어노테이션과 함께 순환을 검증한다.
+
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 
 핸들러와 lifecycle 훅은 Java의 override 규칙을 따른다. 재정의한 메서드의 어노테이션만 적용하며 부모와 자식을 중복 등록하지 않는다. 재정의 메서드에서 어노테이션을 제거하면 부모의 어노테이션도 실행되지 않는다.

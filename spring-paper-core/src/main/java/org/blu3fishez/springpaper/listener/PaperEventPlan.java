@@ -21,7 +21,7 @@ final class PaperEventPlan {
     private PaperEventPlan() {}
 
     @SuppressWarnings("unchecked")
-    static List<Handler> build(List<PaperListenerRegistrar.Candidate> candidates) {
+    static List<Handler> build(List<PaperListenerRegistrar.Candidate> candidates, List<PaperEventRelation> relations) {
         List<Handler> handlers = new ArrayList<>();
         for (var candidate : candidates) {
             Class<?> type = candidate.type();
@@ -48,7 +48,7 @@ final class PaperEventPlan {
                         handlers.add(new Handler(candidate, method, event, eventType, nativeHandlers(eventType), handlers.size()));
                     });
         }
-        return order(handlers);
+        return order(handlers, relations);
     }
 
     private static HandlerList nativeHandlers(Class<? extends Event> event) {
@@ -69,7 +69,7 @@ final class PaperEventPlan {
         }
     }
 
-    private static List<Handler> order(List<Handler> handlers) {
+    private static List<Handler> order(List<Handler> handlers, List<PaperEventRelation> relations) {
         // Index metadata, not consumer beans: hashCode/equals on a listener may depend on mutable game state.
         List<LinkedHashSet<Integer>> edges = new ArrayList<>();
         int[] remaining = new int[handlers.size()];
@@ -88,6 +88,18 @@ final class PaperEventPlan {
                     if (after.isAssignableFrom(target.candidate.type())) relation(target, source, edges, remaining);
                 }
             }
+        }
+        // 도메인 구현끼리 클래스 참조를 추가하지 않도록 최상위 구성도 같은 관계 그래프에 참여한다.
+        // 별도 숫자 순서나 두 번째 dispatcher를 만들지 않고 동일한 cycle/native-priority 검증을 쓴다.
+        for (PaperEventRelation rule : relations) {
+            HandlerList nativeList = nativeHandlers(rule.event());
+            var before = handlers.stream().filter(handler -> handler.handlers == nativeList
+                    && handler.metadata.priority() == rule.priority()
+                    && rule.before().isAssignableFrom(handler.candidate.type())).toList();
+            var after = handlers.stream().filter(handler -> handler.handlers == nativeList
+                    && handler.metadata.priority() == rule.priority()
+                    && rule.after().isAssignableFrom(handler.candidate.type())).toList();
+            for (Handler first : before) for (Handler last : after) relation(first, last, edges, remaining);
         }
         var ready = new PriorityQueue<Integer>();
         for (int i = 0; i < remaining.length; i++) if (remaining[i] == 0) ready.add(i);

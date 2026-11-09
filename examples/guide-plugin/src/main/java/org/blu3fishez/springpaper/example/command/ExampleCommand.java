@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.example.listener.ExampleListener;
 import org.blu3fishez.springpaper.example.listener.ExampleAfterListener;
+import org.blu3fishez.springpaper.example.listener.ExampleConfiguredListener;
 import org.blu3fishez.springpaper.example.service.ExamplePdcVerificationService;
 import org.blu3fishez.springpaper.example.service.NoteService;
 import org.blu3fishez.springpaper.example.service.OperatorService;
@@ -25,6 +26,7 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
     private final ExampleListener listener;
     private final ExampleConnectionVerificationService connectionSecurity;
     private final ExampleAfterListener after;
+    private final ExampleConfiguredListener configured;
     private final ExamplePdcVerificationService pdc;
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String authorized = operators.verifyConsole();
@@ -41,11 +43,11 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
             return authorized + "\n" + connectionSecurity.verify().toCompletableFuture().join() + "\n" + persistentData;
         }).whenComplete((result, error) -> tasks.main(() -> {
             if (error != null) throw new IllegalStateException("Spring Paper smoke failed", error);
-            if (listener.signals() != 1 || after.getSignals() != 1) throw new IllegalStateException("Paper event verification failed");
+            if (listener.signals() != 1 || after.getSignals() != 1 || configured.getSignals() != 1) throw new IllegalStateException("Paper event verification failed");
             try {
                 Files.createDirectories(plugin.getDataFolder().toPath());
                 Files.writeString(plugin.getDataFolder().toPath().resolve("smoke-success.txt"),
-                        "paper=" + plugin.getServer().getMinecraftVersion() + "\n" + result + "\njpa=committed\ncache=hit\nevent=1\nevent-order=relation\n");
+                        "paper=" + plugin.getServer().getMinecraftVersion() + "\n" + result + "\njpa=committed\ncache=hit\nevent=1\nevent-order=annotation+composition\n");
             } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
             sender.sendPlainMessage("SPRING_PAPER_SMOKE_OK");
         }).exceptionally(failure -> {
