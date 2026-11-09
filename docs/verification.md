@@ -4,7 +4,7 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 수행한 검사
 
-- `./gradlew build`: 전체 빌드와 98개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
+- `./gradlew build`: 전체 빌드와 99개 자동 테스트 성공. 초기 구현에서 clean build도 수행했다.
 - `./gradlew -p examples/guide-plugin build --configuration-cache`: included build 소비 예제와 설정 캐시 저장·재사용 확인.
 - `python3 scripts/verify-published-consumer.py`: 격리된 Maven 배포물만 쓰는 별도 소비 빌드, 설정 캐시 재사용, 현재 클래스 bytecode 대조 성공.
 - Gradle 플러그인 validatePlugins와 작성 파일 600줄 검사 통과.
@@ -15,13 +15,13 @@ Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와
 
 ## 자동 검증
 
-총 98개, 실패·오류·스킵 0.
+총 99개, 실패·오류·스킵 0.
 
 | 모듈 | 테스트 수 |
 |---|---:|
 | spring-paper-cache | 2 |
 | spring-paper-config | 4 |
-| spring-paper-core | 37 |
+| spring-paper-core | 38 |
 | spring-paper-data-jpa | 3 |
 | spring-paper-data-pdc | 10 |
 | spring-paper-gradle-plugin | 3 |
@@ -56,7 +56,7 @@ Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현
 - 실제 등록한 커스텀 이벤트가 listener를 한 번 호출하고 ready 작업이 콘솔 명령을 실행
 - Spring Security 콘솔 인가, 작업자 JPA 커밋/재조회, 반복 조회 cache hit 확인
 - 소비자 AuthenticationProvider → PENDING challenge → 추가 증거 검증 → AUTHENTICATED → disconnect 및 저장소 부재 확인
-- 콘솔 별칭 sp의 반복 실행에서도 PDC·순서 검증 성공. TTL 경과 후 별칭은 2026-11-08 실행에서 별도로 확인했다.
+- 콘솔 별칭 sp를 cache TTL 이후 다시 실행해 PDC·순서·재조회 검증 성공.
 - 이번 실행 이후 갱신된 smoke-success.txt/smoke-stop.txt를 검사해 과거 marker를 성공으로 오인하지 않음
 - AutoCloseable인 예제의 PaperStop은 한 번 실행; EntityManagerFactory → Hikari 순서로 정리
 - 정상 stop 후 테스트 포트가 더 이상 listening하지 않음
@@ -64,12 +64,12 @@ Paper의 리소스 가시성 문제는 같은 Java 25/Spring 환경에서 재현
 서버 로그에서 확인한 결과:
 
 ```text
-12:41:00 SPRING_PAPER_CUSTOM_START
-12:41:03 SPRING_PAPER_SMOKE_OK
-12:41:08 SPRING_PAPER_SMOKE_OK  (sp 별칭)
-12:41:19 SPRING_PAPER_CUSTOM_STOP
-12:41:19 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
-12:41:19 SpringPaper - Shutdown completed.
+12:48:30 SPRING_PAPER_CUSTOM_START
+12:48:39 SPRING_PAPER_SMOKE_OK
+12:49:44 SPRING_PAPER_SMOKE_OK  (sp 별칭)
+12:49:45 SPRING_PAPER_CUSTOM_STOP
+12:49:45 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
+12:49:45 SpringPaper - Shutdown completed.
 ```
 
 smoke-success.txt:
@@ -119,11 +119,11 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 
 build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 114개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
-- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: a92166be721fcc649e17b40e3acf96edd9eda134863589c967a87d8a391a89b5
-- 크기: 40066164 bytes, ZIP 중복 entry 0
+- 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 8833fdc253e444e982a6a71eb47572a1daf63ac7c22521eb34ab2c2f1545052e
+- 크기: 40066464 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), JPA·Cache·Security SPI 제공자 4개 병합 보존
-- 독립 Maven 소비 JAR SHA-256: 6bb0476726379e889d8d9601e5654068faa8f9ea3d816dc7424a956accfa0721
+- 독립 Maven 소비 JAR SHA-256: 3270c18696c6f35c37c7a483033fcd5356f46098a104dcede2d6f3dd8509064f
 - Paper 서버 JAR SHA-256: 9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf
 
 ## 검증 범위의 한계
@@ -147,6 +147,7 @@ build/verification-repository의 Maven 플러그인 marker와 모듈만으로 �
 PDC의 원인은 [PdcRecordMapper](../spring-paper-data-pdc/src/main/java/org/blu3fishez/springpaper/pdc/internal/PdcRecordMapper.java)의 staging 주석,
 [아이템 어댑터](../spring-paper-data-pdc/src/main/java/org/blu3fishez/springpaper/pdc/PdcRepositoryFactory.java)의 read-only view 주석,
 [FactoryBean/Registrar](../spring-paper-data-pdc/src/main/java/org/blu3fishez/springpaper/pdc/internal/PdcRepositoriesRegistrar.java)의 타입 발견 주석에 남겼다.
+같은 리스너의 LOWEST/ MONITOR 복수 단계가 관계 대상으로 함께 선택되던 회귀를 실패 테스트로 재현했다. 같은 priority가 있으면 그 메서드들만 선택하고, 없으면 native 순서 모순을 검증한다.
 전역 숫자 순서와 상속 이벤트 문제는 [PaperEventPlan](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/listener/PaperEventPlan.java)의 native HandlerList 주석에 기록했다.
 
 GitHub 첫 push는 GH007(비공개 작성자 메일 보호)로 거절됐다. 공개 GitHub 계정 ID로 확인한 noreply 주소로 미게시 커밋을 고쳐 재시도했다. 이후 사용자의 명시적 요청으로 이 spring-paper 저장소의 로컬 user.email도 같은 주소로 설정했다. 전역 Git·다른 저장소·계정 설정은 변경하지 않았다.

@@ -10,6 +10,8 @@ import org.bukkit.event.Listener;
  * An optional relationship on an EventHandler method. Applies to listeners in the same native
  * HandlerList/priority; it never overrides Paper priority or another plugin's registrations.
  * Referenced listener types absent in the active role impose no dependency.
+ * If a referenced listener handles several priorities, its matching priority is selected.
+ * With no matching priority, a relationship that reverses native priority is rejected.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)

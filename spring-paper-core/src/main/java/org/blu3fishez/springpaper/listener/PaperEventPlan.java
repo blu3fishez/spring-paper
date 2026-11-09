@@ -77,16 +77,11 @@ final class PaperEventPlan {
         for (Handler source : handlers) {
             PaperEventOrder order = source.method.getAnnotation(PaperEventOrder.class);
             if (order == null) continue;
-            for (Handler target : handlers) {
-                // EntityDamageEvent and EntityDamageByEntityEvent, for example, share one HandlerList.
-                // Grouping by Java event class would silently discard a real ordering relationship.
-                if (source.handlers != target.handlers) continue;
-                for (Class<?> before : order.before()) {
-                    if (before.isAssignableFrom(target.candidate.type())) relation(source, target, edges, remaining);
-                }
-                for (Class<?> after : order.after()) {
-                    if (after.isAssignableFrom(target.candidate.type())) relation(target, source, edges, remaining);
-                }
+            for (Class<?> before : order.before()) {
+                for (Handler target : targets(source, before, handlers)) relation(source, target, edges, remaining);
+            }
+            for (Class<?> after : order.after()) {
+                for (Handler target : targets(source, after, handlers)) relation(target, source, edges, remaining);
             }
         }
         // 도메인 구현끼리 클래스 참조를 추가하지 않도록 최상위 구성도 같은 관계 그래프에 참여한다.
@@ -115,6 +110,18 @@ final class PaperEventPlan {
             throw new IllegalArgumentException("Cyclic Paper event ordering: " + unresolved);
         }
         return List.copyOf(result);
+    }
+
+    private static List<Handler> targets(Handler source, Class<?> type, List<Handler> handlers) {
+        // EntityDamageEvent and its entity subtype share a native HandlerList.
+        var matching = handlers.stream().filter(target -> source.handlers == target.handlers
+                && type.isAssignableFrom(target.candidate.type())).toList();
+        var samePriority = matching.stream()
+                .filter(target -> source.metadata.priority() == target.metadata.priority()).toList();
+        // 소비자 리스너가 LOWEST capture와 MONITOR finalize를 함께 가질 수 있다. 같은 phase의
+        // 관계를 다른 phase에도 걸면 유효한 순서가 모순으로 거절됐다. 같은 priority를 우선 선택하고,
+        // 그것이 없을 때만 native 순서를 뒤집으려는 명백한 오설정을 relation에서 검증한다.
+        return samePriority.isEmpty() ? matching : samePriority;
     }
 
     private static void relation(Handler before, Handler after, List<LinkedHashSet<Integer>> edges, int[] remaining) {

@@ -33,6 +33,11 @@ class EventOrderingTest {
         @EventHandler(priority = EventPriority.HIGHEST)
         public void damage(Damage event) { calls.add("counter"); }
     }
+    public static class MultiPhaseArmor extends Armor {
+        MultiPhaseArmor(List<String> calls) { super(calls); }
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void observed(Damage event) { calls.add("observed"); }
+    }
     public static class ConfiguredCounter extends Counter {
         ConfiguredCounter(List<String> calls) { super(calls); }
         @Override @EventHandler(priority = EventPriority.HIGHEST)
@@ -176,6 +181,23 @@ class EventOrderingTest {
                     List.of(new PaperEventRelation(Damage.class, EventPriority.HIGHEST, Armor.class, ConfiguredCounter.class)));
             for (var callback : host.callbacks) callback.execute(null, new Damage());
             assertEquals(List.of("armor", "counter"), calls);
+        }
+    }
+
+    @Test void referencesTheMatchingPriorityWhenAListenerHandlesSeveralPhases() throws Exception {
+        var host = new Host();
+        List<String> calls = new ArrayList<>();
+        try (var registrar = host.registrar()) {
+            registrar.registerAll(List.of(
+                    new PaperListenerRegistrar.Candidate("counter", new Counter(calls), Counter.class),
+                    new PaperListenerRegistrar.Candidate("armor", new MultiPhaseArmor(calls), MultiPhaseArmor.class)));
+            for (var registration : mockingDetails(host.manager).getInvocations()) {
+                if (registration.getArgument(2) == EventPriority.HIGHEST) {
+                    registration.<EventExecutor>getArgument(3).execute(null, new Damage());
+                }
+            }
+            assertEquals(List.of("armor", "counter"), calls);
+            assertEquals(3, host.callbacks.size());
         }
     }
 
