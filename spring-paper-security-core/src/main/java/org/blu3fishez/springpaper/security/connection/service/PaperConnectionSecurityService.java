@@ -1,5 +1,8 @@
 package org.blu3fishez.springpaper.security.connection.service;
 
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -351,11 +354,11 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         volatile ScheduledFuture<?> pendingTimer;
         Managed(PaperSecuritySession snapshot) { this.connection = snapshot.connection(); this.snapshot = snapshot; }
     }
+    @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
     private static final class Operation {
         final Managed owner;
         final CompletableFuture<PaperSecuritySession> result = new CompletableFuture<>();
         volatile ScheduledFuture<?> timeout;
-        Operation(Managed owner) { this.owner = owner; }
     }
     private record Evaluation(PaperSecurityDecision decision, Throwable failure) {}
 }

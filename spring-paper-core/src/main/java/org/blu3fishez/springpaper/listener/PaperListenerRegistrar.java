@@ -1,10 +1,13 @@
 package org.blu3fishez.springpaper.listener;
 
+import lombok.RequiredArgsConstructor;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import org.blu3fishez.springpaper.service.PaperInvocationService;
 import org.blu3fishez.springpaper.spi.PaperInvocation;
 import org.bukkit.command.CommandSender;
@@ -21,36 +24,31 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.util.ReflectionUtils;
 
 /** Owns only its listener tokens, preserving Paper's priority, cancellation and calling thread. */
+@RequiredArgsConstructor
 public final class PaperListenerRegistrar implements AutoCloseable {
     private final JavaPlugin plugin;
     private final PaperInvocationService invocations;
     private final List<Listener> registrations = new ArrayList<>();
     private volatile boolean closed;
 
-    public PaperListenerRegistrar(JavaPlugin plugin, PaperInvocationService invocations) {
-        this.plugin = plugin;
-        this.invocations = invocations;
+    /** Standalone registration. Use one batch for relationships between several listeners. */
+    public void register(String name, Object bean, Class<?> type) {
+        registerAll(List.of(new Candidate(name, bean, type)));
     }
 
-    @SuppressWarnings("unchecked")
-    public void register(String name, Object bean, Class<?> type) {
-        if (!(bean instanceof Listener)) throw new IllegalArgumentException(name + " must implement Bukkit Listener");
-        for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
-            EventHandler handler = method.getAnnotation(EventHandler.class);
-            if (handler == null || method.isBridge() || method.isSynthetic()) continue;
-            if (!Modifier.isPublic(method.getModifiers()) || Modifier.isStatic(method.getModifiers())
-                    || method.getParameterCount() != 1 || method.getReturnType() != void.class
-                    || !Event.class.isAssignableFrom(method.getParameterTypes()[0])) {
-                throw new IllegalArgumentException(name + ": @EventHandler requires public void method(Event)");
-            }
-        }
-        Listener token = new Listener() {};
-        registrations.add(token);
-        // 회귀 검증: 모든 선언을 순회해 등록하면 부모/자식 override가 둘 다 등록되었다.
-        // 선언 순회는 잘못된 시그니처 검증에만 쓰고, 실행 대상은 Java override가 반영된 public 메서드로 고른다.
-        for (Method method : type.getMethods()) {
-            EventHandler handler = method.getAnnotation(EventHandler.class);
-            if (handler == null || method.isBridge() || method.isSynthetic()) continue;
+    /** Register the active role's listeners together; no Order annotation is required. */
+    public void registerAll(List<Candidate> candidates) {
+        if (closed) throw new IllegalStateException("Paper listener registrar is closed");
+        var plan = PaperEventPlan.build(List.copyOf(candidates));
+        Map<Candidate, Listener> tokens = new IdentityHashMap<>();
+        for (var entry : plan) {
+            String name = entry.candidate().name();
+            Object bean = entry.candidate().bean();
+            Method method = entry.method();
+            EventHandler handler = entry.metadata();
+            Listener token = tokens.computeIfAbsent(entry.candidate(), candidate -> {
+                Listener created = new Listener() {}; registrations.add(created); return created;
+            });
             Method invocable;
             // 원본 target을 꺼내 호출하면 Security/Transactional 등 Spring advice를 우회한다.
             // EventListenerMethodProcessor와 같은 selectInvocableMethod 계약으로 프록시에 노출된 메서드만 호출한다.
@@ -62,7 +60,7 @@ public final class PaperListenerRegistrar implements AutoCloseable {
             // 비공개이면 다른 패키지의 invoke가 실패한다. Spring ApplicationListenerMethodAdapter와 같이
             // 프록시에서 선택한 메서드의 접근성만 보완하며 원본 target으로 advice를 우회하지 않는다.
             ReflectionUtils.makeAccessible(invocable);
-            Class<? extends Event> eventType = (Class<? extends Event>) method.getParameterTypes()[0];
+            Class<? extends Event> eventType = entry.eventType();
             plugin.getServer().getPluginManager().registerEvent(eventType, token, handler.priority(),
                     (listener, event) -> {
                         if (closed || !eventType.isInstance(event)) return;
@@ -72,6 +70,10 @@ public final class PaperListenerRegistrar implements AutoCloseable {
                         } catch (Exception error) { throw new EventException(error); }
                     }, plugin, handler.ignoreCancelled());
         }
+    }
+
+    public record Candidate(String name, Object bean, Class<?> type) {
+        public Candidate { java.util.Objects.requireNonNull(name); java.util.Objects.requireNonNull(bean); java.util.Objects.requireNonNull(type); }
     }
 
     private static Object invoke(Method method, Object bean, Event event) throws Exception {

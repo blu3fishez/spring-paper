@@ -1,5 +1,8 @@
 package org.blu3fishez.springpaper.config;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -15,6 +18,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /** Safe YAML data shared by the runtime and development Gradle plugin. */
 public final class YamlDocument {
+    @Getter
+    @Accessors(fluent = true, chain = false)
     private final Map<String, Object> values;
 
     private YamlDocument(Map<String, Object> values) {
@@ -52,8 +57,6 @@ public final class YamlDocument {
         result.putAll(overrides.values);
         return new YamlDocument(result);
     }
-
-    public Map<String, Object> values() { return values; }
 
     public String text(String key, String fallback) {
         Object value = values.get(key);

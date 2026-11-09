@@ -5,6 +5,7 @@ ext {
     springDataVersion = '2026.0.2'
     springSecurityVersion = '7.1.2'
     paperVersion = '26.3.build.244-stable'
+    lombokVersion = '1.18.48'
 }
 
 subprojects {
@@ -28,11 +29,16 @@ subprojects {
         options.addStringOption('Xdoclint:none', '-quiet')
     }
     dependencies {
+        compileOnly "org.projectlombok:lombok:${rootProject.lombokVersion}"
+        annotationProcessor "org.projectlombok:lombok:${rootProject.lombokVersion}"
+        testCompileOnly "org.projectlombok:lombok:${rootProject.lombokVersion}"
+        testAnnotationProcessor "org.projectlombok:lombok:${rootProject.lombokVersion}"
         api platform("org.springframework:spring-framework-bom:${rootProject.springVersion}")
         testImplementation platform('org.junit:junit-bom:6.0.3')
         testImplementation 'org.junit.jupiter:junit-jupiter'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
+    apply from: rootProject.file('gradle/lombok-docs.gradle')
     tasks.withType(Test).configureEach { useJUnitPlatform() }
     publishing {
         publications {

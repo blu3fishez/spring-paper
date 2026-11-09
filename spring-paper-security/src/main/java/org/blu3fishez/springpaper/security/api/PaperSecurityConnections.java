@@ -1,5 +1,8 @@
 package org.blu3fishez.springpaper.security.api;
 
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+
 import io.papermc.paper.connection.PlayerConnection;
 import java.net.SocketAddress;
 import java.time.Clock;
@@ -115,6 +118,7 @@ public final class PaperSecurityConnections implements ApplicationListener<Paylo
         return binding != null && binding.connection.equals(connection) ? binding : null;
     }
     private record Transport(UUID playerId, SocketAddress address) {}
+    @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
     private static final class Binding {
         final PaperSecurityConnection connection;
         final Transport key;
@@ -123,8 +127,5 @@ public final class PaperSecurityConnections implements ApplicationListener<Paylo
         volatile Instant cachedAt = Instant.MIN;
         volatile Player player;
         volatile boolean invalidated;
-        Binding(PaperSecurityConnection connection, Transport key, PlayerConnection transport) {
-            this.connection = connection; this.key = key; this.transport = transport;
-        }
     }
 }

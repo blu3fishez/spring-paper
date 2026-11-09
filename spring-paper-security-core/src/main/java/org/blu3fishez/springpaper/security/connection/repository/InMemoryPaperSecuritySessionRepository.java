@@ -1,5 +1,7 @@
 package org.blu3fishez.springpaper.security.connection.repository;
 
+import lombok.RequiredArgsConstructor;
+
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,10 +15,10 @@ import org.blu3fishez.springpaper.security.connection.domain.PaperSecuritySessio
 import org.blu3fishez.springpaper.security.connection.spi.PaperSecuritySessionRepository;
 
 /** Plugin-local default. Consumers replace this bean for shared or durable sessions. */
+@RequiredArgsConstructor
 public final class InMemoryPaperSecuritySessionRepository implements PaperSecuritySessionRepository {
     private final ConcurrentHashMap<UUID, PaperSecuritySession> sessions = new ConcurrentHashMap<>();
     private final Clock clock;
-    public InMemoryPaperSecuritySessionRepository(Clock clock) { this.clock = clock; }
     @Override public CompletionStage<Boolean> create(PaperSecuritySession initial) {
         if (initial.revision() != 0 || initial.status() != PaperSecuritySession.Status.PENDING || !initial.active(clock.instant())) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("A fresh pending session is required"));

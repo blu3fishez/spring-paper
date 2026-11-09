@@ -33,6 +33,55 @@ Gradle 개발 설정은 `springPaper.configurationFile`의 YAML(기본 src/main/
 
 현재 실행 검증 대상은 Paper 26.3/Java 25다. 버전 설정 가능성과 모든 과거/미래 Paper 버전의 호환성은 다르다. 다른 버전은 적절한 API coordinate/JDK와 실제 기동을 검증해야 한다. Folia의 region scheduler는 지원하지 않는다.
 
+## PDC
+
+`spring-paper-data-pdc`를 의존성에 추가하고 활성 구성에서 저장소 범위를 선택한다.
+일반 component 스캔은 인터페이스 저장소를 만들지 않는다. 역할별 구성에 아래 선언을 두면
+비활성 역할의 저장소도 정의되지 않는다.
+
+```java
+@Configuration(proxyBeanMethods = false)
+@EnablePaperPdcRepositories(basePackageClasses = BrokerTags.class)
+class BrokerConfiguration {}
+
+@PaperPdcRepository
+public interface BrokerTags extends PdcRepository<Entity, BrokerTags.State> {
+    @PdcDocument(marker = "islandId")
+    record State(
+        @PdcField(key = "black_market/broker_island") long islandId,
+        @PdcField(key = "black_market/broker_owner") UUID ownerId
+    ) {}
+}
+```
+
+`read`는 `PdcReadResult`를 반환한다. `PRESENT`는 값, `ABSENT`는 매핑한 키가 모두 없음,
+`INVALID`는 부분 누락·잘못된 저장 타입·변환/record 검증 실패다. 문제의 키와 종류도 제공한다.
+읽기는 복구·삭제·이관을 수행하지 않는다. 소비자는 `.value()`의 Optional이나 문제 목록으로
+자기 기능의 기존 실패 정책을 적용한다.
+
+`exists`는 문서의 marker에 지정한 record component의 **키 존재**를 검사한다.
+marker를 생략하면 매핑한 키 하나 이상이 있는지 확인한다. 타입·내용의 정상 여부는 read 결과로 판단한다.
+엔티티 UUID처럼 holder에서 계산하는 정보는 소비자 매핑이 얻으며 별도 저장 키를 만들지 않는다.
+
+키의 기본 namespace는 플러그인 이름이고 `namespace:key`도 명시할 수 있다.
+키 문자열은 반드시 선언한다. Java 필드 이름 변경으로 저장 키가 바뀌지 않으며 버전 키를 자동 추가하지 않는다.
+기본 매핑은 native 숫자·문자열·boolean·primitive 배열이고, UUID는 **STRING**,
+enum은 **STRING/name()**을 사용한다. 기존 형식이 다르면 Paper의 `PersistentDataType` 구현을
+Spring 빈으로 제공하고 `@PdcField(type = MyType.class)`로 선택한다. 이 SPI를 중복 정의하지 않는다.
+`required = false`는 nullable reference component에만 사용하며 null을 쓰면 이전 키를 지운다.
+
+holder는 `Entity`, `ItemStack`, `PersistentDataContainer`다. ItemStack의 읽기 뷰는 수정하지 않고
+Paper의 editPersistentDataContainer로 변경을 반영한다. container 저장소는 ItemMeta 등
+소비자가 이미 획득한 mutable container에도 사용할 수 있다. 이 경우 외부 객체의 최종 반영은 소비자 책임이다.
+빈으로 선언하지 않는 경우 `PdcRepositoryFactory.entity/item/container(model)`도 사용할 수 있다.
+`spring.paper.pdc.enabled: true`는 이 factory의 자동 구성을 켜며, Enable 어노테이션으로도 명시적으로 구성할 수 있다.
+
+모든 holder 접근은 Paper 메인 스레드에서 동기적으로 실행한다. 작업자 호출은 holder를 만지기 전에 거절한다.
+쓰기 전에 모든 필드를 별도 container에서 변환·검증해 변환 실패로 인한 부분 쓰기를 방지한다.
+이것이 Paper의 디스크 저장·원자적 트랜잭션·DB와의 동시 commit을 보장하지는 않는다.
+remove는 문서가 소유한 키만 삭제한다. 스키마 이관·서명·아이템 소유권·게임 규칙은 소비자가 유지한다.
+기존 저장 키와 타입을 바꾸는 이관을 암묵적으로 실행하지 않는다.
+
 ## JPA
 
 ```yaml
@@ -126,6 +175,7 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | [InitDestroyAnnotationBeanPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/annotation/InitDestroyAnnotationBeanPostProcessor.java), [MergedBeanDefinitionPostProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/MergedBeanDefinitionPostProcessor.java), [DisposableBeanAdapter](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/DisposableBeanAdapter.java) | PaperBeanCatalog는 merged metadata에서 후보와 외부 종료 소유권만 기록한다. 기반 definition 속성을 수정하거나 Paper 입력을 등록하지 않는다. PaperStop이 소유한 종료는 Spring이 다시 호출하지 않는다. |
 | [EventListenerMethodProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/EventListenerMethodProcessor.java) | 동일한 AopUtils.selectInvocableMethod 계약으로 관리 빈의 프록시를 호출한다. 메타데이터를 발견한 뒤 실제 입력을 여는 책임은 PaperListenerRegistrar/PaperCommandRegistrar가 맡는다. |
 | [DefaultListableBeanFactory](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/DefaultListableBeanFactory.java), [ApplicationListenerMethodAdapter](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/ApplicationListenerMethodAdapter.java) | findAnnotationOnBean과 getOrder로 factory method metadata를 존중한다. package-private 어댑터의 public 메서드도 프록시에서 선택한 뒤 makeAccessible하며 원본 target으로 advice를 우회하지 않는다. |
+| [ClassPathScanningCandidateComponentProvider](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/ClassPathScanningCandidateComponentProvider.java), [ImportBeanDefinitionRegistrar](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/annotation/ImportBeanDefinitionRegistrar.java), [FactoryBeanRegistrySupport](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-beans/src/main/java/org/springframework/beans/factory/support/FactoryBeanRegistrySupport.java) | PDC의 제한된 인터페이스 탐색·조건 평가·타입 발견·singleton 제품 캐시·post-processing은 Spring에 맡긴다. 실제 holder 접근과 record 매핑만 PDC 모듈이 소유한다. |
 | [AbstractApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java) | refresh 실패의 singleton 정리와 컨텍스트 destruction은 Spring이 소유한다. 메인 스레드 사용자 훅과 입력 해제·워커 drain 순서만 SpringPaperApplication이 그 바깥에서 조정한다. |
 | [AbstractPlatformTransactionManager](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-tx/src/main/java/org/springframework/transaction/support/AbstractPlatformTransactionManager.java) | beforeBegin이 doBegin보다 먼저 실행되는 공식 listener로 메인 스레드 DB 작업을 차단한다. 트랜잭션 구현은 JpaTransactionManager에 위임한다. |
 | [TransactionAwareCacheDecorator](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context-support/src/main/java/org/springframework/cache/transaction/TransactionAwareCacheDecorator.java) | put/evict/clear의 afterCommit 반영을 Spring에 위임한다. 자체 트랜잭션 캐시 동기화기를 만들지 않는다. |
@@ -145,5 +195,6 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | HikariCP / SnakeYAML | 7.0.2 / 2.6 |
 | Caffeine | 3.2.4 |
 | Gradle / run-paper / Shadow | 9.6.1 / 3.0.2 / 9.6.0 |
+| Lombok (compileOnly / annotationProcessor) | 1.18.48 |
 
 서버 API와 SLF4J 구현은 Shadow JAR에 포함하지 않는다. Spring/Hibernate 및 SPI 서비스 메타데이터는 소비자 JAR에 포함·병합한다. 호환되지 않는 Spring 버전을 여러 플러그인이 동시에 사용하는 환경이나 별도 relocation 정책은 현재 검증 범위에 포함되지 않는다.

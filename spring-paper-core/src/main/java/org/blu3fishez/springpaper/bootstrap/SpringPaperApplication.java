@@ -1,5 +1,10 @@
 package org.blu3fishez.springpaper.bootstrap;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.Accessors;
+
 import java.util.Arrays;
 import java.util.ServiceLoader;
 import java.util.concurrent.ExecutionException;
@@ -25,15 +30,16 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.annotation.AnnotatedElementUtils;
 
 /** One plugin-owned application, with no JVM-global context or server shutdown policy. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SpringPaperApplication implements AutoCloseable {
     private final JavaPlugin plugin;
+    @Getter
+    @Accessors(fluent = true, chain = false)
     private final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
     private PaperLifecycleManager lifecycle;
     private PaperListenerRegistrar listeners;
     private PaperCommandRegistrar commands;
     private boolean closed;
-
-    private SpringPaperApplication(JavaPlugin plugin) { this.plugin = plugin; }
 
     public static SpringPaperApplication run(JavaPlugin plugin) {
         if (!plugin.getServer().isPrimaryThread()) throw new IllegalStateException("Start Spring Paper on the server thread");
@@ -110,7 +116,7 @@ public final class SpringPaperApplication implements AutoCloseable {
         commands = new PaperCommandRegistrar(plugin, invocations, context.getEnvironment()::resolveRequiredPlaceholders);
         // 같은 EventPriority의 전투 listener는 등록 순서도 게임 규칙이다. Spring 7의 getOrder가
         // Ordered, 타입 및 @Bean factory method metadata를 해석하므로 별도 순서 해석기를 만들지 않는다.
-        candidates.entrySet().stream().map(entry -> new Adapter(entry.getKey(), context.getBean(entry.getKey()), entry.getValue()))
+        var adapters = candidates.entrySet().stream().map(entry -> new Adapter(entry.getKey(), context.getBean(entry.getKey()), entry.getValue()))
                 .sorted((left, right) -> {
                     boolean leftPriority = left.bean instanceof org.springframework.core.PriorityOrdered;
                     boolean rightPriority = right.bean instanceof org.springframework.core.PriorityOrdered;
@@ -118,8 +124,12 @@ public final class SpringPaperApplication implements AutoCloseable {
                     int order = Integer.compare(context.getDefaultListableBeanFactory().getOrder(left.name, left.bean),
                             context.getDefaultListableBeanFactory().getOrder(right.name, right.bean));
                     return order == 0 ? left.name.compareTo(right.name) : order;
-                }).forEach(entry -> {
-            if (factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null) listeners.register(entry.name, entry.bean, entry.type);
+                }).toList();
+        // Event relationships require the complete active batch, not one global number on every listener.
+        listeners.registerAll(adapters.stream()
+                .filter(entry -> factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null)
+                .map(entry -> new PaperListenerRegistrar.Candidate(entry.name, entry.bean, entry.type)).toList());
+        adapters.forEach(entry -> {
             for (PaperCommandExecutor command : AnnotatedElementUtils.getMergedRepeatableAnnotations(entry.type, PaperCommandExecutor.class)) {
                 commands.register(entry.name, entry.bean, command);
             }
@@ -133,7 +143,6 @@ public final class SpringPaperApplication implements AutoCloseable {
         thread.setContextClassLoader(loader);
         try { action.run(); } finally { thread.setContextClassLoader(previous); }
     }
-    public AnnotationConfigApplicationContext context() { return context; }
     private record Adapter(String name, Object bean, Class<?> type) {}
 
     @Override public void close() {

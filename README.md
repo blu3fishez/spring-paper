@@ -32,9 +32,9 @@ public final class MyPlugin extends SpringPaperPlugin {}
 
 ```java
 @PaperEventListener
+@RequiredArgsConstructor
 public final class JoinListener implements Listener {
     private final WelcomeService welcome;
-    public JoinListener(WelcomeService welcome) { this.welcome = welcome; }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void joined(PlayerJoinEvent event) { welcome.joined(event.getPlayer()); }
@@ -55,7 +55,9 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 
 하나의 실행기가 서로 다른 usage·permission을 가진 명령을 처리하면 `@PaperCommandExecutor`를 반복한다. 같은 메타데이터를 공유하는 레이블은 기존 `commands` 배열을 사용한다.
 
-소유 객체의 상태·콜백을 캡처한 리스너는 `@Bean @PaperEventListener` 메서드에서 기존 인스턴스를 반환할 수 있다. 클래스에 component 어노테이션을 붙일 필요가 없다. 같은 우선순위의 이벤트 등록 순서는 Spring의 `PriorityOrdered`, `Ordered`, 타입·factory method의 `@Order`를 따르고, 같은 값이면 빈 이름순이다. Bukkit의 EventPriority가 서로 다르면 Bukkit 우선순위가 먼저 적용된다.
+소유 객체의 상태·콜백을 캡처한 리스너는 `@Bean @PaperEventListener` 메서드에서 기존 인스턴스를 반환할 수 있다. 클래스에 component 어노테이션을 붙일 필요가 없다. 순서 어노테이션 없이 등록할 수 있으며 기본값은 빈 이름순이다. 명시한 `PriorityOrdered`, `Ordered`, 타입·factory method의 `@Order`는 기본 순서를 정하는 호환 경로로 유지한다.
+
+실제로 순서가 필요한 메서드만 `@PaperEventOrder(after = ArmorListener.class)` 또는 `before`를 선언한다. 같은 native HandlerList의 같은 우선순위 안에서 관계를 정렬한다. 상속 이벤트가 처리 목록을 공유하는 경우도 포함한다. Paper의 EventPriority와 모순되거나 순환하는 관계는 입력 등록 전에 거절한다. 비활성 역할의 리스너는 필수 의존성이 되지 않는다.
 
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 
@@ -112,11 +114,16 @@ spring:
 | 모듈 | 제공 기능 | 활성화 |
 |---|---|---|
 | `spring-paper-data-jpa` | Spring Data JPA 저장소, Hibernate, 트랜잭션, Hikari 기본 구성, 기존 자원 재사용 | `spring.paper.jpa.enabled` |
+| `spring-paper-data-pdc` | 엔티티·아이템·container의 선언형 record 매핑, 저장 타입 보존, 읽기 오류 구분 | `@EnablePaperPdcRepositories`; factory 자동 구성은 `spring.paper.pdc.enabled` |
 | `spring-paper-cache` | Spring Cache, Caffeine 기본 제공자, 커밋 뒤 캐시 변경, 기존 CacheManager 재사용 | `spring.paper.cache.enabled` |
 | `spring-paper-security` | 메서드 인가, 소비자 교체형 인증 문맥·거절 처리, 선택형 Paper 접속 어댑터 | `spring.paper.security.enabled` |
 | `spring-paper-security-core` | 호스트 중립 인증 필터·세션·대기·결과 처리, Spring AuthenticationManager/Provider 연동 | Paper Security가 자동 import; 단독 소비는 `@Import(PaperConnectionSecurityConfiguration.class)` |
 
-모듈 JAR 추가와 YAML enabled가 모두 필요하다. 비활성 모듈은 컨텍스트에 구성되지 않는다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
+YAML 자동 구성에는 모듈 JAR과 enabled가 필요하다. PDC의 명시적인 Enable 어노테이션은 해당 구성에서 직접 활성화한다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
+
+PDC 저장소의 [사용법과 저장 계약](docs/configuration.md#pdc)을 참고한다. 기존 키·UUID 문자열·숫자 타입을 선언으로 매핑하고, 아이템 변경 반영과 관련 없는 키 보존은 모듈이 맡는다. 게임 규칙·스키마 이관·엔티티 조회는 소비자가 소유한다.
+
+라이브러리는 Lombok 1.18.48을 컴파일 전용으로 사용한다. 소비 코드에서 생성자 생성을 쓰려면 같은 버전을 `compileOnly`와 `annotationProcessor`에 추가한다. 런타임 JAR에 Lombok을 포함하지 않는다. 단순 필드 대입을 생성하고 검증·키 생성·자원 획득이 있는 생성자는 유지한다.
 
 `@Transactional` 서비스는 `PaperTasks.async`에서 호출한다. 기본 JPA 트랜잭션 매니저는 Paper 메인 스레드의 트랜잭션 시작을 거절한다. 작업 결과를 메인 스레드에 반영할 때 플레이어 세션·원정·revision 재검증은 사용하는 게임의 책임이다.
 
@@ -137,6 +144,6 @@ Security는 호출마다 인증 문맥을 설정하고 finally에서 이전 문�
 
 예제는 included build로 이 저장소의 라이브러리와 Gradle 플러그인을 사용한다. `runServer`는 지정한 Paper 빌드를 다운로드하고 예제 Shadow JAR을 연결한다. EULA는 사용자가 확인한 뒤 YAML에서 명시적으로 수락한다. 기본값은 false다.
 
-예제 플러그인은 실제 Paper 커스텀 이벤트·콘솔 명령·JPA 저장/조회·캐시·메서드 인가와 소비자 Provider의 인증 대기·추가 증거·완료·정리를 검사하고 `SPRING_PAPER_SMOKE_OK` 및 plugins/SpringPaperExample/smoke-success.txt를 남긴다. 종료 훅은 smoke-stop.txt를 남긴다. 인증 증거는 합성 검증용이며 실제 Minecraft/Discord 인증기나 클라이언트 검증을 대신하지 않는다.
+예제 플러그인은 실제 Paper 커스텀 이벤트와 선후 관계·엔티티/아이템 PDC·콘솔 명령·JPA 저장/조회·캐시·메서드 인가와 소비자 Provider의 인증 대기·추가 증거·완료·정리를 검사하고 `SPRING_PAPER_SMOKE_OK` 및 plugins/SpringPaperExample/smoke-success.txt를 남긴다. 종료 훅은 smoke-stop.txt를 남긴다. 인증 증거는 합성 검증용이며 실제 Minecraft/Discord 인증기나 클라이언트 검증을 대신하지 않는다.
 
-이 초기 라이브러리는 SimpleExtraction 도입 준비물이다. SimpleExtraction의 실제 Guice 제거·역할별 마이그레이션과 검증계 배포는 별도 후속 작업이며, 기존 프로젝트를 변경하지 않았다.
+SimpleExtraction 도입은 별도 저장소의 [SIMEXT-90 PR](https://git.blu3fishez.org/tls-team/simple-extraction-plugin/pulls/254)에서 진행한다. 이 라이브러리의 검증 성공이 소비자의 실제 역할·인증 모드·검증계 접속 성공을 뜻하지 않는다.

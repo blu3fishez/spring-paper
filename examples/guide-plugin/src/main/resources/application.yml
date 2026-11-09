@@ -34,6 +34,8 @@ spring:
       enabled: true
       names: [notes]
       spec: 'maximumSize=100,expireAfterWrite=1m'
+    pdc:
+      enabled: true
     security:
       enabled: true
       connection:

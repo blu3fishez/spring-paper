@@ -1,0 +1,6 @@
+dependencies {
+    api project(':spring-paper-core')
+    compileOnly "io.papermc.paper:paper-api:${rootProject.paperVersion}"
+    testImplementation "io.papermc.paper:paper-api:${rootProject.paperVersion}"
+    testImplementation 'org.mockito:mockito-core:5.23.0'
+}

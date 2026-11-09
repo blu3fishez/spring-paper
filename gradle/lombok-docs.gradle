@@ -1,0 +1,29 @@
+// Published Javadoc must include Lombok-generated constructors/accessors, not an implicit no-arg API.
+configurations {
+    lombokDocumentation {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+dependencies { lombokDocumentation "org.projectlombok:lombok:${rootProject.lombokVersion}" }
+
+def compileInputs = sourceSets.main.compileClasspath
+def javaSources = sourceSets.main.java
+def lombokConfiguration = rootProject.file('lombok.config')
+def expandedSources = layout.buildDirectory.dir('generated/delombok')
+def expandLombok = tasks.register('delombok', JavaExec) {
+    group = 'documentation'
+    description = 'Expands generated members for accurate published Javadoc.'
+    classpath = configurations.lombokDocumentation
+    mainClass = 'lombok.launch.Main'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    args 'delombok', 'src/main/java', '--target', expandedSources.get().asFile.absolutePath, '--encoding', 'UTF-8'
+    argumentProviders.add({ ['--classpath', compileInputs.asPath] } as CommandLineArgumentProvider)
+    inputs.files(javaSources, compileInputs, lombokConfiguration)
+    outputs.dir(expandedSources)
+}
+tasks.named('javadoc') {
+    dependsOn expandLombok
+    source = fileTree(expandedSources) { include '**/*.java' }
+}
+tasks.named('sourcesJar') { from lombokConfiguration }

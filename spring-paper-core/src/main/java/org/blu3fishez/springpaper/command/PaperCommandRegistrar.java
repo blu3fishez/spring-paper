@@ -1,5 +1,7 @@
 package org.blu3fishez.springpaper.command;
 
+import lombok.RequiredArgsConstructor;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +16,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Binds descriptor commands to managed beans; aliases/permissions remain owned by plugin.yml. */
+@RequiredArgsConstructor
 public final class PaperCommandRegistrar implements AutoCloseable {
     private final JavaPlugin plugin;
     private final PaperInvocationService invocations;
@@ -24,11 +27,6 @@ public final class PaperCommandRegistrar implements AutoCloseable {
 
     public PaperCommandRegistrar(JavaPlugin plugin, PaperInvocationService invocations) {
         this(plugin, invocations, UnaryOperator.identity());
-    }
-    public PaperCommandRegistrar(JavaPlugin plugin, PaperInvocationService invocations, UnaryOperator<String> resolve) {
-        this.plugin = plugin;
-        this.invocations = invocations;
-        this.resolve = resolve;
     }
 
     public void register(String beanName, Object bean, PaperCommandExecutor metadata) {
