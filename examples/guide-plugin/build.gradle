@@ -6,6 +6,7 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok:1.18.48'
     implementation 'org.blu3fishez.springpaper:spring-paper-data-pdc:0.1.0-SNAPSHOT'
     implementation 'org.blu3fishez.springpaper:spring-paper-data-jpa:0.1.0-SNAPSHOT'
+    implementation 'org.blu3fishez.springpaper:spring-paper-data-jdbc:0.1.0-SNAPSHOT'
     implementation 'org.blu3fishez.springpaper:spring-paper-cache:0.1.0-SNAPSHOT'
     implementation 'org.blu3fishez.springpaper:spring-paper-security:0.1.0-SNAPSHOT'
     runtimeOnly 'com.h2database:h2:2.4.240'

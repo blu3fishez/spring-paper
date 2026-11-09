@@ -126,6 +126,7 @@ Spring Boot 런타임과 starter 자동 구성은 사용하지 않는다.
 
 | 모듈 | 제공 기능 | 활성화 |
 |---|---|---|
+| `spring-paper-data-jdbc` | 표준 JdbcClient·JdbcTemplate, 소비자의 DataSource·트랜잭션 매니저 사용 | `spring.paper.jdbc.enabled` |
 | `spring-paper-data-jpa` | Spring Data JPA 저장소, Hibernate, 트랜잭션, Hikari 기본 구성, 기존 자원 재사용 | `spring.paper.jpa.enabled` |
 | `spring-paper-data-pdc` | 엔티티·아이템·container의 선언형 record 매핑, 저장 타입 보존, 읽기 오류 구분 | `@EnablePaperPdcRepositories`; factory 자동 구성은 `spring.paper.pdc.enabled` |
 | `spring-paper-cache` | Spring Cache, Caffeine 기본 제공자, 커밋 뒤 캐시 변경, 기존 CacheManager 재사용 | `spring.paper.cache.enabled` |

@@ -82,6 +82,17 @@ Paper의 editPersistentDataContainer로 변경을 반영한다. container 저장
 remove는 문서가 소유한 키만 삭제한다. 스키마 이관·서명·아이템 소유권·게임 규칙은 소비자가 유지한다.
 기존 저장 키와 타입을 바꾸는 이관을 암묵적으로 실행하지 않는다.
 
+## JDBC
+
+`spring-paper-data-jdbc`와 `spring.paper.jdbc.enabled: true`로 Spring 원본 `JdbcClient`,
+`JdbcOperations`, `NamedParameterJdbcOperations`를 사용할 수 있다. 이미 제공한 빈은 유지한다.
+이 모듈은 JPA·Hibernate·커넥션 풀을 가져오지 않는다. DataSource와 트랜잭션 매니저는 소비자가 제공한다.
+
+JDBC 전용 애플리케이션은 `PaperJdbcTransactions.workerOnly(dataSource, paperThreadAccess)`를
+`PlatformTransactionManager` 빈으로 제공할 수 있다. 반환값은 표준 `JdbcTransactionManager`다.
+JPA와 함께 사용하면 기존 `JpaTransactionManager`를 사용한다. 등록 순서에 관계없이 JDBC 모듈이
+별도의 트랜잭션 매니저를 만들지 않는다. 두 모듈의 독립 사용과 병행 사용을 모두 지원한다.
+
 ## JPA
 
 ```yaml
@@ -111,6 +122,10 @@ repositories/entities는 제한된 패키지 목록 또는 쉼표 구분 문자�
 - `spring.paper.jpa.transaction-manager-bean`
 
 새 DataSource를 만들 때만 datasource 설정이 필요하다. JDBC 드라이버는 소비 플러그인이 제공한다. Hibernate 엔티티를 게임 세션에 공유하지 않고 트랜잭션 안에서 완료된 값을 반환한다. 소유권·revision·조건부 갱신·영향 행 수·정산 원자성은 저장소의 명시적 계약으로 유지한다.
+
+명시적으로 JPA 매니저를 제공할 때는 `PaperJpaTransactions.workerOnly(entityManagerFactory, paperThreadAccess)`로
+동일한 메인 스레드 시작 방지 정책을 유지할 수 있다. 반환값은 표준 `JpaTransactionManager`다.
+Spring JDBC는 같은 DataSource와 이 매니저를 사용하면 JPA 트랜잭션에 참여한다.
 
 JPA/JDBC/Jdbi가 같은 DB를 사용한다는 사실만으로 같은 트랜잭션이 되지는 않는다. Jdbi 자동 이관·Handle 계약 변경·분산 DB/Redis 원자성은 이 라이브러리가 암묵적으로 수행하지 않는다. 기존 트랜잭션 매니저를 제공하면 스레드 검사와 트랜잭션 참여 정책도 소비자가 구성한다.
 

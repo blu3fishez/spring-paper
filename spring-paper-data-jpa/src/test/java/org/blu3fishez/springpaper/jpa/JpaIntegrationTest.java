@@ -18,6 +18,8 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.blu3fishez.springpaper.jdbc.JdbcConfiguration;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 class JpaIntegrationTest {
     @Configuration(proxyBeanMethods = false)
@@ -113,6 +115,37 @@ class JpaIntegrationTest {
             assertEquals(java.util.List.of(10L), jdbc.queryForList("SELECT id FROM batch_evidence", Long.class));
             assertEquals(1, context.getBeansOfType(PlatformTransactionManager.class).size());
             assertEquals(1, context.getBeansOfType(DataSource.class).size());
+        }
+    }
+
+    @Test void jdbcAndJpaModulesReuseOnePoolAndJpaManagerInEitherRegistrationOrder() {
+        for (boolean jdbcFirst : new boolean[] {true, false}) {
+            try (var context = new AnnotationConfigApplicationContext()) {
+                context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("test", Map.of(
+                        "spring.paper.jpa.entities", "org.blu3fishez.springpaper.jpa.fixture",
+                        "spring.paper.jpa.datasource.url", "jdbc:h2:mem:" + UUID.randomUUID(),
+                        "spring.paper.jpa.properties.hibernate.hbm2ddl.auto", "create-drop")));
+                context.registerBean(PaperConfiguration.class, () -> new PaperConfiguration(context.getEnvironment()));
+                context.registerBean(PaperThreadAccess.class, () -> () -> false);
+                context.register(StandardRepositories.class);
+                context.register(jdbcFirst ? new Class<?>[] {JdbcConfiguration.class, JpaConfiguration.class}
+                        : new Class<?>[] {JpaConfiguration.class, JdbcConfiguration.class});
+                context.refresh();
+                var transaction = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+                var jdbc = context.getBean(JdbcClient.class);
+                var notes = context.getBean(NoteRepository.class);
+                assertThrows(IllegalStateException.class, () -> transaction.executeWithoutResult(status -> {
+                    notes.save(new StoredNote(20, "shared"));
+                    SharedEntityManagerCreator.createSharedEntityManager(context.getBean(EntityManagerFactory.class)).flush();
+                    assertEquals("shared", jdbc.sql("SELECT text FROM StoredNote WHERE id=20").query(String.class).single());
+                    throw new IllegalStateException("rollback shared connection");
+                }));
+                assertFalse(notes.existsById(20L));
+                assertEquals(1, context.getBeansOfType(DataSource.class).size());
+                assertEquals(1, context.getBeansOfType(PlatformTransactionManager.class).size());
+                assertInstanceOf(org.springframework.orm.jpa.JpaTransactionManager.class,
+                        context.getBean(PlatformTransactionManager.class));
+            }
         }
     }
 }

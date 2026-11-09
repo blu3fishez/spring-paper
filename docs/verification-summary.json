@@ -1,7 +1,7 @@
 {
   "date": "2026-11-09",
   "junit": {
-    "tests": 110,
+    "tests": 115,
     "failures": 0,
     "errors": 0,
     "skipped": 0
@@ -10,7 +10,8 @@
     "spring-paper-cache": 7,
     "spring-paper-config": 4,
     "spring-paper-core": 42,
-    "spring-paper-data-jpa": 5,
+    "spring-paper-data-jdbc": 4,
+    "spring-paper-data-jpa": 6,
     "spring-paper-data-pdc": 10,
     "spring-paper-gradle-plugin": 3,
     "spring-paper-security": 12,
@@ -18,8 +19,8 @@
   },
   "example_jar": {
     "path": "examples/guide-plugin/build/libs/spring-paper-example-0.1.0-SNAPSHOT.jar",
-    "sha256": "47128c27c7362d9de90f8a92494f426bfc8f19513aaaafd6758765cd111ef1b3",
-    "bytes": 40075943,
+    "sha256": "29f77de6fcca55f954865102da39667dcb546267342299c03dd09c052c7b914d",
+    "bytes": 40081131,
     "duplicate_entries": 0,
     "boot_classes": 0,
     "bukkit_classes": 0,
@@ -30,21 +31,22 @@
     "module_providers": [
       "org.blu3fishez.springpaper.pdc.internal.PdcModule",
       "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.jdbc.JdbcModule",
       "org.blu3fishez.springpaper.cache.CacheModule",
       "org.blu3fishez.springpaper.security.SecurityModule"
     ],
-    "current_library_classes_verified": 122,
+    "current_library_classes_verified": 127,
     "lombok_classes": 0
   },
   "published_consumer": {
     "version": "0.1.0-SNAPSHOT",
     "repository": "build/verification-repository",
-    "consumer": "build/publication-consumer-c6cnmjl8",
+    "consumer": "build/publication-consumer-sxn7689f",
     "included_build": false,
     "configuration_cache_reused": true,
-    "jar": "build/publication-consumer-c6cnmjl8/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
-    "sha256": "701cadbf9b667def69896a67a54e5f056627fa82e80743bf8bc14b1cdb71f3ea",
-    "current_library_classes_verified": 122,
+    "jar": "build/publication-consumer-sxn7689f/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "8feb892cf1ea6362a8ad628ee81244f559efc55b8dfe9821aeb20f4b628a2d4a",
+    "current_library_classes_verified": 127,
     "duplicate_entries": 0,
     "forbidden_packages": {
       "org/springframework/boot/": 0,
@@ -55,6 +57,7 @@
     "module_providers": [
       "org.blu3fishez.springpaper.pdc.internal.PdcModule",
       "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.jdbc.JdbcModule",
       "org.blu3fishez.springpaper.cache.CacheModule",
       "org.blu3fishez.springpaper.security.SecurityModule"
     ]
@@ -87,6 +90,7 @@
         "connection-security=custom-pending-authenticated-closed",
         "pdc=entity+item+legacy+clone+remove",
         "jpa=committed",
+        "jdbc=shared-pool",
         "cache=hit",
         "event=1",
         "event-order=annotation+composition"
@@ -96,20 +100,20 @@
       ]
     },
     "log_evidence": [
-      "[13:58:25] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
-      "[13:58:25] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
-      "[13:58:29] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
-      "[13:58:32] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
-      "[13:58:35] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[13:59:40] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
-      "[13:59:41] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
-      "[13:59:41] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
-      "[13:59:41] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
-      "[13:59:41] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
+      "[14:13:57] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)",
+      "[14:13:57] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3",
+      "[14:14:00] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585",
+      "[14:14:05] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START",
+      "[14:14:07] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[14:15:13] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK",
+      "[14:15:13] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP",
+      "[14:15:13] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'",
+      "[14:15:13] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...",
+      "[14:15:14] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed."
     ],
     "command": "./gradlew -p examples/guide-plugin -PspringPaper.configuration=application-local.yml runServer --console=plain",
     "log": "examples/guide-plugin/run/logs/latest.log",
-    "plugin_jar_sha256": "47128c27c7362d9de90f8a92494f426bfc8f19513aaaafd6758765cd111ef1b3"
+    "plugin_jar_sha256": "29f77de6fcca55f954865102da39667dcb546267342299c03dd09c052c7b914d"
   },
   "fixed_native_failure": {
     "symptom": "FileNotFoundException: org/bukkit/command/CommandExecutor.class",

@@ -19,6 +19,8 @@ spring:
         simulation-distance: 3
         spawn-protection: 0
         max-players: 2
+    jdbc:
+      enabled: true
     jpa:
       enabled: true
       entities: org.blu3fishez.springpaper.example.domain

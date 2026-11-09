@@ -19,8 +19,6 @@ import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionExecution;
-import org.springframework.transaction.TransactionExecutionListener;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @Configuration(proxyBeanMethods = false)
@@ -62,16 +60,9 @@ public class JpaConfiguration {
             String[] managers = factory.getBeanNamesForType(PlatformTransactionManager.class, false, false);
             if (managers.length == 0) {
                 registry.registerBeanDefinition("transactionManager", new RootBeanDefinition(JpaTransactionManager.class, () -> {
-                    JpaTransactionManager manager = new JpaTransactionManager(factory.getBean("entityManagerFactory", EntityManagerFactory.class));
+                    EntityManagerFactory entities = factory.getBean("entityManagerFactory", EntityManagerFactory.class);
                     PaperThreadAccess threads = factory.getBeanProvider(PaperThreadAccess.class).getIfAvailable();
-                    if (threads != null) manager.setTransactionExecutionListeners(List.of(new TransactionExecutionListener() {
-                        @Override public void beforeBegin(TransactionExecution transaction) {
-                            // Spring AbstractPlatformTransactionManager는 doBegin 앞에서 이 공식 hook을 호출한다.
-                            // DB 연결을 얻은 뒤 경고하는 방식이 아니라 메인 스레드의 I/O 시작 전에 차단한다.
-                            if (threads.isPrimaryThread()) throw new IllegalStateException("JPA transactions must run on a worker; use PaperTasks.async");
-                        }
-                    }));
-                    return manager;
+                    return threads == null ? new JpaTransactionManager(entities) : PaperJpaTransactions.workerOnly(entities, threads);
                 }));
             } else {
                 String existing = choose(properties, "spring.paper.jpa.transaction-manager-bean", managers);

@@ -37,7 +37,8 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
             int loadsAfterFirst = notes.reads();
             String second = notes.read(1);
             // 캐시 TTL 만료 뒤의 정상 재조회도 허용한다. 누적 횟수 대신 연속 두 번째 조회의 적중을 검사한다.
-            if (!first.equals("committed-value") || !first.equals(second) || notes.reads() != loadsAfterFirst) {
+            if (!first.equals("committed-value") || !first.equals(second) || notes.reads() != loadsAfterFirst
+                    || !first.equals(notes.readJdbc(1))) {
                 throw new IllegalStateException("JPA/cache verification failed");
             }
             return authorized + "\n" + connectionSecurity.verify().toCompletableFuture().join() + "\n" + persistentData;
@@ -47,7 +48,7 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
             try {
                 Files.createDirectories(plugin.getDataFolder().toPath());
                 Files.writeString(plugin.getDataFolder().toPath().resolve("smoke-success.txt"),
-                        "paper=" + plugin.getServer().getMinecraftVersion() + "\n" + result + "\njpa=committed\ncache=hit\nevent=1\nevent-order=annotation+composition\n");
+                        "paper=" + plugin.getServer().getMinecraftVersion() + "\n" + result + "\njpa=committed\njdbc=shared-pool\ncache=hit\nevent=1\nevent-order=annotation+composition\n");
             } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
             sender.sendPlainMessage("SPRING_PAPER_SMOKE_OK");
         }).exceptionally(failure -> {

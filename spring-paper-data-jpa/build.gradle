@@ -6,5 +6,6 @@ dependencies {
     implementation 'org.hibernate.orm:hibernate-core:7.4.13.Final'
     implementation 'com.zaxxer:HikariCP:7.0.2'
     testImplementation 'com.h2database:h2:2.4.240'
+    testImplementation project(':spring-paper-data-jdbc')
     testImplementation "io.papermc.paper:paper-api:${rootProject.paperVersion}"
 }

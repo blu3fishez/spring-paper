@@ -68,7 +68,7 @@ def main():
         if duplicates or any(forbidden.values()):
             raise AssertionError({"duplicate_entries": duplicates, "forbidden_packages": forbidden})
         providers = jar.read("META-INF/services/org.blu3fishez.springpaper.spi.SpringPaperModule").decode().splitlines()
-        expected = {"org.blu3fishez.springpaper.jpa.JpaModule", "org.blu3fishez.springpaper.cache.CacheModule",
+        expected = {"org.blu3fishez.springpaper.jpa.JpaModule", "org.blu3fishez.springpaper.jdbc.JdbcModule", "org.blu3fishez.springpaper.cache.CacheModule",
                     "org.blu3fishez.springpaper.security.SecurityModule",
                     "org.blu3fishez.springpaper.pdc.internal.PdcModule"}
         if len(providers) != len(expected) or set(providers) != expected:
