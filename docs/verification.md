@@ -107,12 +107,18 @@ Paper는 명령·DB migration 36개·데이터팩 재로딩·종료·재시작�
 서버 로그에서 확인한 결과:
 
 ```text
-15:22:45 SPRING_PAPER_CUSTOM_START
-15:22:47 SPRING_PAPER_SMOKE_OK
-15:23:53 SPRING_PAPER_SMOKE_OK  (sp 별칭)
-15:23:53 SPRING_PAPER_CUSTOM_STOP
-15:23:53 Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
-15:23:53 SpringPaper - Shutdown completed.
+[22:38:41] [ServerMain/INFO]: [bootstrap] Running Java 25 (OpenJDK 64-Bit Server VM 25.0.2+10-LTS; Eclipse Adoptium Temurin-25.0.2+10) on Mac OS X 26.6.2 (aarch64)
+[22:38:41] [ServerMain/INFO]: [bootstrap] Loading Paper 26.3-244-main@35a2d15 (2026-11-06T11:34:02Z) for Minecraft 26.3
+[22:38:44] [Server thread/INFO]: Starting Minecraft server on 127.0.0.1:25585
+[22:38:47] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_PREPARED
+[22:38:47] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_START
+[22:38:50] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK
+[22:39:56] [Server thread/INFO]: SPRING_PAPER_SMOKE_OK
+[22:39:56] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_CUSTOM_STOP
+[22:39:56] [Server thread/INFO]: [SpringPaperExample] SPRING_PAPER_LIFECYCLE_RELEASED
+[22:39:56] [Server thread/INFO]: [org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean] Closing JPA EntityManagerFactory for persistence unit 'spring-paper'
+[22:39:56] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown initiated...
+[22:39:56] [Server thread/INFO]: [com.zaxxer.hikari.HikariDataSource] SpringPaper - Shutdown completed.
 ```
 
 smoke-success.txt:
@@ -136,6 +142,7 @@ event-order=annotation+composition
 
 | 구분 | 원인과 해결 | 주석 위치 |
 |---|---|---|
+| 소비자 조건 클래스 기동 실패 | 컨텍스트를 먼저 생성해 BeanFactory가 서버 TCCL을 캡처했다. 플러그인 로더 범위에서 컨텍스트 자체를 생성하고 호출자 로더를 복원한다. | [SpringPaperApplication.run](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/bootstrap/SpringPaperApplication.java) |
 | 실제 Paper 기동 실패 | Paper는 호스트 클래스를 로딩하면서 해당 리소스는 숨긴다. Spring 인터페이스 메타데이터 조회가 실패했다. 클래스 정의 로더는 유지하고 리소스 조회만 보완했다. | [PaperResourceLoader](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/bootstrap/PaperResourceLoader.java) |
 | 종료 회귀 | 원본 bean definition 수정만으로는 캐시된 merged definition의 close 추론이 남아 이중 종료됐다. Spring의 MergedBeanDefinitionPostProcessor와 외부 관리 메서드 계약으로 처리했다. | [PaperBeanCatalog](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/bootstrap/PaperBeanCatalog.java) |
 | 소비자 어댑터 접근 제약 | package-private 클래스의 public 메서드는 다른 패키지에서 invoke할 수 없다. 프록시에서 선택한 메서드만 makeAccessible한다. 세션을 캡처한 어댑터는 factory method metadata로 등록한다. | [PaperListenerRegistrar](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/listener/PaperListenerRegistrar.java), [PaperBeanCatalog](../spring-paper-core/src/main/java/org/blu3fishez/springpaper/bootstrap/PaperBeanCatalog.java) |
@@ -165,7 +172,7 @@ Security의 builder·ProviderManager·FilterChainProxy·ContextClosedEvent 근�
 build/verification-repository의 Maven 플러그인 marker와 모듈만으로 소비했다. includeBuild 없이 최초 refresh 빌드와 설정 캐시 재사용 빌드가 모두 성공했다. 현재 라이브러리 클래스 136개의 bytecode가 소비 JAR과 일치한다. ~/.m2나 외부 Maven 저장소에는 배포하지 않았다.
 
 - 실제 서버에서 사용한 included-build 예제 JAR SHA-256: 4d5c01cff7d37d74388d80c762c871c06df831e4c7b1ea4510ef1ef70f6e338a
-- 크기: 40096771 bytes, ZIP 중복 entry 0
+- 크기: 40096770 bytes, ZIP 중복 entry 0
 - Spring Boot / Bukkit / SLF4J 포함 클래스: 각각 0
 - 프로젝트 클래스 major 69 (Java 25), PDC·JPA·JDBC·Cache·Security SPI 제공자 5개 병합 보존
 - 독립 Maven 소비 JAR SHA-256: 03019dd79b1475c529baad745310ad8f22bed45cb10ac54c35875196a4f36e3f
