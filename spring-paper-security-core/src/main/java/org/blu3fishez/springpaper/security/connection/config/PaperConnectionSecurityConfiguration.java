@@ -57,6 +57,7 @@ public class PaperConnectionSecurityConfiguration {
         scheduler.setDaemon(true); scheduler.setRemoveOnCancelPolicy(true); scheduler.setClock(clock);
         return scheduler;
     }
+    // SmartLifecycle intentionally starts an active security configuration; @Lazy cannot defer that stage.
     @Bean @Fallback public PaperConnectionSecurityService paperDefaultConnectionSecurityService(
             PaperSecuritySessionRepository sessions, List<PaperSecurityFilterChain> chains, Clock clock,
             @Qualifier(SCHEDULER_BEAN_NAME) TaskScheduler scheduler, PaperSecuritySettings settings,

@@ -12,6 +12,10 @@ Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다
 
 [Spring 내부 구현과 확장 지점](docs/configuration.md#spring-내부-구현에서-확인한-확장-계약)에 컨텍스트·프록시·종료·트랜잭션·캐시의 책임을 정리했다. 발생한 문제의 원인은 해당 구현 옆의 한국어 주석과 [검증 기록](docs/verification.md#막혔던-지점과-코드-주석)에 남겼다.
 
+복사해서 쓸 작은 업무는 [business-plugin](examples/business-plugin/README.md)을 먼저 본다.
+[전후 비교·검증](docs/usability-contracts.md), [실행 완료/취소](docs/execution-contracts.md), [기본/전용 빈](docs/default-beans.md),
+[선택 기능](docs/optional-features.md)의 지원 계약을 사용한다.
+
 ## 진입점
 
 ```java

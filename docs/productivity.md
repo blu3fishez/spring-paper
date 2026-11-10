@@ -1,5 +1,7 @@
 # 소비자 개발 흐름 개선 — 2026-11-10
 
+이 문서는 첫 개선 단계의 기록이다. 후속 실행/빈 선택 계약은 [추가 검증](usability-contracts.md)을 따른다.
+
 기준은 Spring Paper `2b90f06`, SimpleExtraction `feat/SIMEXT-90`의 `d1d56da1`이다.
 라이브러리와 고정 submodule 소비 빌드에서 구현·검증했다. 운영 중인 개발계 배포·재기동은 하지 않았다.
 초기에 넓게 작성했던 JavaPlugin 치환 초안은 소비자의 ignored build/migration에 보존하고,
@@ -14,7 +16,7 @@
 |---|---|---|---|
 | 1 | skyblock/infrastructure/mailbox/.../mailbox/infrastructure/paper/PaperMailboxMaintenance.java | BukkitTask·start/close·초→tick 변환·worker 제출·AtomicBoolean 중복 방지·완료/실패 처리 | @Scheduled의 background fixedDelay에서 DB 작업을 직접 완료 |
 | 2 | dungeon/infrastructure/worldcycle/.../worldcycle/DungeonWorldCollapseCoordinator.java | 1초 scanTask·시작 여부·100tick 재시도/종료 예약·취소·중첩 worker/main callback | scan은 @Scheduled, 재시도/종료는 같은 TaskScheduler의 일회성 Future |
-| 3 | common/paper/.../recipebook/service/RecipeBookSynchronizationService.java | polling task·worker 완료 후 main.execute 중첩·접속 session·UUID 직렬화·quit 저장 flush | poll은 @Scheduled, 결과는 handleAsync + 기존 main executor; 데이터 보장 유지 |
+| 3 | common/paper/.../recipebook/service/RecipeBookSynchronizationService.java | polling task·worker 완료 후 main.execute 중첩·접속 session·UUID 직렬화·quit 저장 flush | poll은 @Scheduled, 결과는 관리형 nextTick (후속 실행 계약); 데이터 보장 유지 |
 | 확인 | common/paper/.../recipebook/listener/RecipeBookListener.java | 이벤트 등록/해제 | 이미 PaperEventListener가 소유. 중복 등록 코드 추가 없음 |
 | 확인 | common/paper/.../gameguide/command/GuideCommand.java | 실행기/탭 완성과 descriptor 등록 | 이미 PaperCommandExecutor/Gradle metadata가 소유. 예제로 재검증 |
 | 유지 | common/infrastructure/platform/.../paper/PlayerTaskExecutor.java | 플레이어별 순서와 앞선 실패 이후 진행 | 게임별 직렬화 계약. @Async로 대체하지 않음 |
@@ -71,11 +73,12 @@ worker.whenComplete((known, error) -> {
 });
 
 // 이후: 동일한 UUID 직렬화 executor를 사용하고 main에서 다시 유효성을 검사
-worker.<Void>handleAsync((known, error) -> {
-    if (closed || sessions.get(id) != session || !player.isOnline() || server.getPlayer(id) != player) return null;
-    // 오류 처리 또는 현재 플레이어 반영
-    return null;
-}, mainThread).exceptionally(error -> { /* 예약/반영 오류 기록 */ return null; });
+var applied = execution.nextTick(worker, (known, error) -> {
+    if (closed || sessions.get(id) != session || server.getPlayer(id) != player) return;
+    if (error != null) throw new CompletionException(error);
+    apply(player, known);
+});
+// 반환하는 applied는 source 대기부터 종료/취소 결과를 관리한다.
 ```
 
 세션 검사·멱등적 merge·트랜잭션·미완료 quit 저장 대기는 업무 계약이므로 소비자에 남는다.

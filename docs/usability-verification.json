@@ -1,0 +1,281 @@
+{
+  "date": "2026-11-11",
+  "baselines": {
+    "library": "40e8b8bb70bf42dbbeffb15bd314a0acb0146c1c",
+    "consumer": "290226c11dddf05965af2f00f0165dcc16db9ed5"
+  },
+  "java_source_changes": {
+    "library": {
+      "examples_main": {
+        "before_lines": 90,
+        "after_lines": 293,
+        "changed_files": 14,
+        "added_files": 11,
+        "net_lines": 203
+      },
+      "examples_test": {
+        "before_lines": 0,
+        "after_lines": 202,
+        "changed_files": 2,
+        "added_files": 2,
+        "net_lines": 202
+      },
+      "main": {
+        "before_lines": 642,
+        "after_lines": 963,
+        "changed_files": 12,
+        "added_files": 4,
+        "net_lines": 321
+      },
+      "test": {
+        "before_lines": 105,
+        "after_lines": 723,
+        "changed_files": 8,
+        "added_files": 7,
+        "net_lines": 618
+      }
+    },
+    "consumer": {
+      "main": {
+        "before_lines": 685,
+        "after_lines": 680,
+        "changed_files": 9,
+        "added_files": 0,
+        "net_lines": -5
+      },
+      "test": {
+        "before_lines": 706,
+        "after_lines": 990,
+        "changed_files": 8,
+        "added_files": 3,
+        "net_lines": 284
+      }
+    }
+  },
+  "representative": {
+    "TraceRecoveryService": {
+      "file": "common/paper/src/main/java/org/blu3fishez/simpleExtraction/equipmentrecovery/service/TraceRecoveryService.java",
+      "before_lines": 36,
+      "after_lines": 36
+    },
+    "GuideSynchronizationService": {
+      "file": "common/paper/src/main/java/org/blu3fishez/simpleExtraction/common/feature/gameguide/service/GuideSynchronizationService.java",
+      "before_lines": 283,
+      "after_lines": 280
+    },
+    "RecipeBookSynchronizationService": {
+      "file": "common/paper/src/main/java/org/blu3fishez/simpleExtraction/common/feature/recipebook/service/RecipeBookSynchronizationService.java",
+      "before_lines": 123,
+      "after_lines": 122
+    },
+    "TraceConversionService": {
+      "file": "common/infrastructure/equipmentrecovery/src/main/java/org/blu3fishez/simpleExtraction/equipmentrecovery/service/TraceConversionService.java",
+      "before_lines": 56,
+      "after_lines": 56
+    },
+    "TraceDeliveryService": {
+      "file": "common/infrastructure/equipmentrecovery/src/main/java/org/blu3fishez/simpleExtraction/equipmentrecovery/service/TraceDeliveryService.java",
+      "before_lines": 71,
+      "after_lines": 66
+    }
+  },
+  "library_tests": {
+    "spring-paper-gradle-plugin": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-security": {
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-jdbc": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-cache": {
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-core": {
+      "tests": 107,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-jpa": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-config": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-security-core": {
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-pdc": {
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "example_tests": {
+    "examples/minimal-plugin": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "examples/business-plugin": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "consumer_tests": {
+    "build/test-results/test": {
+      "tests": 277,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "build/test-results/paperCompositionTest": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "common/paper": {
+      "tests": 254,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "verification": {
+    "library_build": true,
+    "javadoc": true,
+    "source_size_limit": 600,
+    "examples_build": [
+      "minimal",
+      "scheduling",
+      "jdbc",
+      "approval",
+      "guide",
+      "business"
+    ],
+    "consumer_build": true,
+    "deployment_or_restart_of_development": false,
+    "docker_image_build": false,
+    "consumer_native_startup": false
+  },
+  "mutations": [
+    {
+      "mutation": "main-cancel-fence",
+      "detected": true,
+      "test": "*ManagedMainExecutionTest.cancellationBeforeSourceOrBeforeNativeDeliveryFencesBothAndNeverInterruptsMain",
+      "log": "build/usability-contracts/mutant-main-cancel-fence.log"
+    },
+    {
+      "mutation": "default-candidate-filter",
+      "detected": true,
+      "test": "*JdbcDefaultsTest.qualifierOnlyOperationsCannotSuppressTheDefaultForAnUnqualifiedConsumer",
+      "log": "build/usability-contracts/mutant-default-candidate-filter.log"
+    }
+  ],
+  "publication": {
+    "version": "0.1.0-SNAPSHOT",
+    "repository": "build/verification-repository",
+    "consumer": "build/publication-consumer-5i3hj2tt",
+    "included_build": false,
+    "configuration_cache_reused": true,
+    "jar": "build/publication-consumer-5i3hj2tt/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "fb1191297120ef7f5d23023254d74bf38a1223bfdc1e1ce7f919b8835ff6f512",
+    "current_library_classes_verified": 153,
+    "duplicate_entries": 0,
+    "forbidden_packages": {
+      "org/springframework/boot/": 0,
+      "org/bukkit/": 0,
+      "org/slf4j/": 0,
+      "lombok/": 0
+    },
+    "module_providers": [
+      "org.blu3fishez.springpaper.pdc.internal.PdcModule",
+      "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.jdbc.JdbcModule",
+      "org.blu3fishez.springpaper.cache.CacheModule",
+      "org.blu3fishez.springpaper.security.SecurityModule"
+    ]
+  },
+  "native": {
+    "paper": "26.3 build244",
+    "java": "25.0.2",
+    "runs": [
+      {
+        "features_enabled": true,
+        "state": "passed_and_stopped",
+        "markers": [
+          "SCHEDULING_OK",
+          "ASYNC_OK virtual=true",
+          "UTILITIES_OK",
+          "JDBC_OK committed=75/75 rollback=75/75 jpa=absent",
+          "APPROVAL_OK",
+          "module=enabled, CONSOLE!",
+          "SPRING_PAPER_SMOKE_OK",
+          "Pending mail: 0"
+        ],
+        "static_command_metadata_present": true,
+        "console": "build/usability-contracts/native-true.log"
+      },
+      {
+        "features_enabled": false,
+        "state": "passed_and_stopped",
+        "markers": [
+          "SCHEDULING_OK",
+          "ASYNC_OK virtual=true",
+          "UTILITIES_OK",
+          "JDBC_OK committed=75/75 rollback=75/75 jpa=absent",
+          "APPROVAL_OK",
+          "module=disabled, CONSOLE!",
+          "SPRING_PAPER_SMOKE_OK"
+        ],
+        "static_command_metadata_present": true,
+        "console": "build/usability-contracts/native-false.log"
+      }
+    ],
+    "verified_library_classes_per_plugin": {
+      "minimal": 71,
+      "scheduling": 71,
+      "jdbc": 75,
+      "approval": 116,
+      "guide": 153,
+      "business": 75
+    },
+    "actual_development_servers_changed": false,
+    "client_login_tested": false,
+    "jar_hashes": {
+      "spring-paper-scheduling-example-0.1.0-SNAPSHOT.jar": "3e60bb91a18b3050a0ea931bd7dbd2428738e351439c7a061d2bb8e9ffd721aa",
+      "spring-paper-example-0.1.0-SNAPSHOT.jar": "b64b115dcb5187a49d9788c3c2035cd1aabf31b26e1fcf9f080904169792b5c2",
+      "spring-paper-business-example-0.1.0-SNAPSHOT.jar": "4553037e12ea36c0239152c7be51f51c4d7243e4ed34391585ac986d91af40da",
+      "spring-paper-approval-example-0.1.0-SNAPSHOT.jar": "fd2ad39ce0ed21e561637675cf2a522b9cadebe450364ca335eabf753ac23134",
+      "spring-paper-jdbc-example-0.1.0-SNAPSHOT.jar": "7f625ffd6756d4d0a3c77922f84a45263ee04b28e1185a5ed9f7674fef189d12"
+    }
+  }
+}

@@ -35,7 +35,7 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String authorized = operators.verifyConsole();
         String persistentData = pdc.verify();
-        tasks.async(() -> {
+        tasks.nextTick(tasks.async(() -> {
             notes.ensureNote(1, "committed-value");
             String first = notes.read(1);
             int loadsAfterFirst = notes.reads();
@@ -53,7 +53,7 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
             try { notes.read(2); throw new IllegalStateException("CacheEvict kept deleted data"); }
             catch (java.util.NoSuchElementException expected) { /* committed deletion is visible */ }
             return authorized + "\n" + connectionSecurity.verify().toCompletableFuture().join() + "\n" + persistentData;
-        }).whenComplete((result, error) -> tasks.main(() -> {
+        }), (result, error) -> {
             if (error != null) throw new IllegalStateException("Spring Paper smoke failed", error);
             if (listener.signals() != 1 || after.getSignals() != 1 || configured.getSignals() != 1) throw new IllegalStateException("Paper event verification failed");
             try {
@@ -65,7 +65,7 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
         }).exceptionally(failure -> {
             logger.log(java.util.logging.Level.SEVERE, "SPRING_PAPER_SMOKE_FAILED", failure);
             return null;
-        }));
+        });
         return true;
     }
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) { return List.of(); }

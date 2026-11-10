@@ -1,4 +1,4 @@
-# 스케줄링·실행 예제
+# 스케줄링·실행 통합 검증 예제
 
 [공통 빌드/실행 방법](../README.md#빌드와-실행)을 따른다. Done 이후 1초 이상 기다리고
 콘솔에서 `paper-scheduling`을 실행한다.
@@ -18,3 +18,5 @@
 probe의 counter·Future·stop은 테스트할 여러 API를 드러내기 위한 장치다.
 일반 유지보수 메서드 하나는 이 장치 없이 @Scheduled와 업무 본문만 작성한다.
 [생산 코드 전환 예제](../../docs/scheduling.md)를 함께 참고한다.
+
+일반 업무를 복사할 때는 [business-plugin](../business-plugin/README.md)을 먼저 본다.

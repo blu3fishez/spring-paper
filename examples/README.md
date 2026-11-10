@@ -6,6 +6,7 @@
 
 | 예제 | 보여주는 기능 | 콘솔 검증 |
 |---|---|---|
+| [business-plugin](business-plugin/README.md) | @Scheduled 만료 정리·안전한 DB→main·소비자 worker/decorator·전용/기본 JDBC 공존·앱 내부 조건부 기능 | paper-inbox |
 | [minimal-plugin](minimal-plugin/README.md) | 진입점·생성자 주입·@Value·initializer·profile·외부 설정·선택 Module SPI·리스너·명령/alias/반복 메타데이터·시작/종료 | paper-hello, paper-hi, paper-welcome |
 | [scheduling-plugin](scheduling-plugin/README.md) | @Scheduled 메인/백그라운드, TaskScheduler 일회성/취소, tick 작업과 자체 취소, @Async, executor, 키·메타데이터·기존 config·청크 lease | paper-scheduling |
 | [jdbc-plugin](jdbc-plugin/README.md) | 소비자 DataSource·JdbcClient·@Transactional 커밋/롤백, JPA 없는 classpath | paper-jdbc |
@@ -15,6 +16,10 @@
 Core, config, Gradle plugin, JDBC, JPA, Cache, PDC, Security와 host-neutral Security Core의
 대표 공개 기능을 이 표에서 찾을 수 있다. Spring 생태계 전체 API를 복제하거나 모든 조합을 제공하는 목록은 아니다.
 Velocity 호스트는 security-core 서비스 호출을 소비자 어댑터로 연결한다. 이 저장소가 Velocity bootstrap을 제공하지 않는다.
+
+복사할 업무 흐름은 **[business-plugin](business-plugin/README.md)**부터 시작한다.
+기본 worker가 충분하면 커스텀 executor 구성을 생략한다. 기존 scheduling/guide 예제의 counter와
+검증 Future·start/stop은 통합 검증 장치이며 최소 업무 구현의 필수 코드가 아니다.
 
 ## 빌드와 실행
 
@@ -41,3 +46,6 @@ Paper가 Done을 출력한 뒤 콘솔 명령을 실행하고 `stop`으로 정상
 2026-11-10 검증에서는 격리 서버에 다섯 예제를 함께 올려 각 마커와 정상 종료를 확인했다.
 실제 플레이어 클라이언트 로그인·Discord OAuth·Velocity forwarding은 이 콘솔 검증에 포함하지 않는다.
 자세한 근거는 [생산성 검증](../docs/productivity.md)을 참고한다.
+
+2026-11-11에는 업무 예제를 포함한 여섯 예제를 함께 기동하고 선택 module/inbox의 true/false를 각각 확인했다.
+[추가 실행·빈 계약 검증](../docs/usability-contracts.md)에 범위와 비용을 기록했다.

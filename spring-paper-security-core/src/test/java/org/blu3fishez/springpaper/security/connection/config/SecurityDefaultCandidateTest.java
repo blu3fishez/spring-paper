@@ -25,4 +25,21 @@ class SecurityDefaultCandidateTest {
             assertTrue(consumer.clock().instant().isAfter(java.time.Instant.EPOCH));
         }
     }
+    @Configuration(proxyBeanMethods = false)
+    static class SuppliedSettings {
+        @Bean PaperSecuritySettings applicationSecuritySettings() {
+            return new PaperSecuritySettings(java.time.Duration.ofSeconds(30),
+                    java.time.Duration.ofSeconds(2), java.time.Duration.ofSeconds(2));
+        }
+    }
+    @Test void replacedDefaultsAreRemovedBeforeEvaluatingTheirConfiguration() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.getEnvironment().getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource("unused",
+                    java.util.Map.of("spring.paper.security.pending-timeout-seconds", "not-an-integer")));
+            context.register(PaperConnectionSecurityConfiguration.class, SuppliedSettings.class);
+            assertDoesNotThrow(context::refresh);
+            assertFalse(context.containsBeanDefinition("paperDefaultSecuritySettings"));
+            assertEquals(java.time.Duration.ofSeconds(30), context.getBean(PaperSecuritySettings.class).pendingTimeout());
+        }
+    }
 }

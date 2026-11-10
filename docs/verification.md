@@ -231,3 +231,9 @@ Paper 메인 스레드에서 확인한다. 사용자 정리는 JPA와 풀 종료
 
 Spring DefaultLifecycleProcessor의 빈 의존 순회와 DefaultSingletonBeanRegistry의 자원 종료 소유권을 참고했다.
 빈 생성 의존성을 Paper 준비 완료로 추론하지 않고, 실제 Paper 작업 관계만 별도로 선언한다.
+
+## 2026-11-11 실행·빈 구성 계약
+
+관리형 source→main 완료, raw Executor의 caller Future 한계, 기본/전용 후보 공존과 외부 worker 소유권을
+[추가 검증 보고서](usability-contracts.md)에 기록했다. 201개 라이브러리 검사·10개 예제 검사, 538개 소비자 검사,
+여섯 예제의 기능 true/false native 실행, 독립 Maven 소비와 두 방어 변형 검출을 확인했다.

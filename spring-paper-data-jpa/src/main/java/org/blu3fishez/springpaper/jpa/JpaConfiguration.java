@@ -65,6 +65,10 @@ public class JpaConfiguration {
                     entities.setPersistenceUnitName(properties.text("spring.paper.jpa.persistence-unit", "spring-paper"));
                     return entities;
                 });
+                // Expose the actual FactoryBean product without eager type discovery. @Lazy does
+                // not suppress Spring's later LoadTimeWeaverAware bootstrap of an active JPA config;
+                // condition the owning JPA import when the whole persistence feature is disabled.
+                definition.setAttribute(org.springframework.beans.factory.FactoryBean.OBJECT_TYPE_ATTRIBUTE, EntityManagerFactory.class);
                 definition.setLazyInit(true);
                 definition.setFallback(true);
                 registry.registerBeanDefinition("entityManagerFactory", definition);

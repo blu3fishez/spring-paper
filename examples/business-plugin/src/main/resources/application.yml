@@ -1,0 +1,26 @@
+spring:
+  paper:
+    minecraft:
+      version: '26.3'
+      api-version: '26.3'
+      api-coordinate: '26.3.build.244-stable'
+      build: 244
+      java-version: 25
+    development:
+      directory: run
+      accept-eula: false
+      jvm-args: ['-Xms512M', '-Xmx1G']
+      server-properties:
+        server-ip: '127.0.0.1'
+        server-port: 25585
+        online-mode: true
+        view-distance: 3
+        simulation-distance: 3
+        max-players: 2
+    jdbc:
+      enabled: true
+
+example:
+  inbox:
+    enabled: true
+    cleanup-delay: PT1H

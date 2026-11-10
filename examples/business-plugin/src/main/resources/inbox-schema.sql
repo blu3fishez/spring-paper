@@ -1,0 +1,1 @@
+CREATE TABLE inbox (owner VARCHAR(36) NOT NULL, expires_at TIMESTAMP NOT NULL);

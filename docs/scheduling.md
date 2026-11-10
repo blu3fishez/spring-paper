@@ -62,24 +62,25 @@ BukkitRunnable overload는 native task identity와 자체 cancel을 보존한다
 ## DB 조회 후 플레이어 갱신
 
 ```java
-tasks.supply(playerId, () -> repository.load(playerId))
-        .handleAsync((state, failure) -> {
-            if (closed || sessions.get(playerId) != session || server.getPlayer(playerId) != player) return null;
-            if (failure != null) { log(failure); return null; }
-            apply(player, state);
-            return null;
-        }, mainThread);
+var read = playerTasks.supply(playerId, () -> repository.load(playerId));
+var applied = execution.nextTick(read, (state, failure) -> {
+    if (closed || sessions.get(playerId) != session || !player.isOnline()
+            || server.getPlayer(playerId) != player) return;
+    if (failure != null) throw new CompletionException(failure);
+    apply(player, state);
+});
+applied.whenComplete((ignored, error) -> { if (error != null) log(error); });
+return applied;
 ```
 
-위 tasks는 소비자의 PlayerTaskExecutor이며 플레이어별 직렬화를 유지한다. mainThread에는
-PaperTickScheduler를 넣는다. 표준 CompletableFuture의 Executor 선택으로 중첩 콜백을 줄인다.
-이 예제의 세션·접속 객체 확인은 소비자 책임이다. 반영 중 예외와 예약 거절은 반환 stage에서 처리한다.
+playerTasks는 소비자의 PlayerTaskExecutor이며 플레이어별 직렬화를 유지한다. execution은 PaperTasks다.
+이 세션/접속 검사는 소비자 책임이다. nextTick(source, handler)는 source 대기부터 결과를 관리하므로
+종료 시 source가 끝나지 않아도 결과를 실패 완료한다. 취소는 원본 DB 작업으로 전파하지 않는다.
 
-PaperTasks는 기존 가상 스레드 backend와 plugin 클래스 로더를 재사용하는 AsyncTaskExecutor이다.
-`.async(Supplier)`·`.run(Runnable)`·`.main(Runnable)`로도 명시적으로 연결할 수 있다.
-표준 execute/submit은 종료 시 TaskRejectedException을 사용하고, async/run은 실패한 Future를 반환한다.
-main은 메인 스레드 호출이면 즉시 실행한다. PaperTickScheduler.execute는 항상 다음 tick으로 미룬다.
-Paper 상태에서 캡처한 불변 값만 worker로 넘긴다. ThreadLocal 트랜잭션·인증 상태는 자동 전파하지 않는다.
+`thenAcceptAsync/handleAsync(..., PaperTickScheduler)`는 callback을 차단해도 호출자가 만든 종속 Future를
+완료할 수 없다. 완료를 기다릴 흐름에는 사용하지 않는다. raw execute와 관리형 경로의 차이,
+외부 Executor/TaskDecorator 제공과 종료 소유권은 [실행 계약](execution-contracts.md)을 따른다.
+main(Runnable)은 이미 main이면 즉시 실행하고 nextTick은 항상 다음 tick이다. 이 차이를 유지한다.
 
 `@Async("paperTasks")`는 @EnableAsync와 프록시를 거치는 다른 빈 호출이 필요하다. final 클래스/메서드,
 private 메서드, self-invocation 제약은 [Spring AOP](https://docs.spring.io/spring-framework/reference/core/aop/proxying.html)와 같다.

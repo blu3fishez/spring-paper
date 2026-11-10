@@ -22,6 +22,7 @@ public final class PaperTickScheduler implements java.util.concurrent.Executor, 
     }
     public boolean isActive() { return !closed.get() && plugin.isEnabled(); }
     /** Always defers to a server tick, including callers already on the Paper thread. */
+    /** Fire-and-forget next tick. Use PaperTasks.nextTick when completion at stop must be observed. */
     @Override public void execute(Runnable action) { runTask(action); }
     public BukkitTask runTask(Runnable action) {
         requireActive();
