@@ -161,9 +161,9 @@ public final class SpringPaperApplication implements AutoCloseable {
         RuntimeException failure = null;
         try {
             // 회귀 검증에서 Spring의 기본 destruction 순서만으로는 진행 중인 작업보다 DB가 먼저 닫힐 수 있었다.
-            // 입력 차단 → 사용자 flush → 워커 drain → Spring 인프라 destruction 순서를 직접 보장한다.
+            // 입력·예약 차단 → main 대기 해제 → 사용자 DB flush → 워커 drain → Spring 파괴를 보장한다.
             // 부분 시작 실패의 정리에서는 getBean으로 새 자원을 만들지 않고 이미 생성된 singleton만 조회한다.
-            AutoCloseable workers = context.getBeanFactory().getSingleton(PaperCoreConfiguration.WORKERS_BEAN_NAME)
+            PaperTasks workers = context.getBeanFactory().getSingleton(PaperCoreConfiguration.WORKERS_BEAN_NAME)
                     instanceof PaperTasks tasks ? tasks : null;
             AutoCloseable scheduler = context.getBeanFactory().getSingleton(PaperMainThreadTaskScheduler.BEAN_NAME)
                     instanceof PaperMainThreadTaskScheduler tasks ? tasks : null;
@@ -173,9 +173,13 @@ public final class SpringPaperApplication implements AutoCloseable {
                     instanceof PaperChunkTickets chunks ? chunks : null;
             AutoCloseable scheduled = context.getBeanFactory().getSingleton(TaskManagementConfigUtils.SCHEDULED_ANNOTATION_PROCESSOR_BEAN_NAME)
                     instanceof ScheduledAnnotationBeanPostProcessor processor ? processor::destroy : null;
-            // Context destruction happens after worker drain. Stop Spring's periodic producers first
-            // so a scheduled job cannot enqueue new worker/main callbacks during that drain.
-            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, scheduled, scheduler, tickets, ticks, workers, context }) {
+            // No further Paper tick can run during synchronous onDisable. Settle managed main waits
+            // before a user's final DB save can queue behind one in the same serial worker lane.
+            // Keep worker admission open through those flush hooks; ContextClosedEvent is too early
+            // for consumer executors that reject new DB work on that standard Spring event.
+            AutoCloseable mainBarrier = workers == null ? null : workers::quiesceMainThread;
+            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, scheduled, scheduler, ticks,
+                    mainBarrier, lifecycle, tickets, workers, context }) {
                 if (resource == null) continue;
                 try { resource.close(); }
                 catch (Exception error) {

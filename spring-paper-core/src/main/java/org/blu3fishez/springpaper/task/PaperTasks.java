@@ -58,6 +58,14 @@ public final class PaperTasks implements AsyncTaskExecutor, AutoCloseable {
     public <T> CompletableFuture<Void> nextTick(CompletionStage<T> source,
             BiConsumer<? super T, ? super Throwable> handler) { return main.submit(source, handler, true); }
 
+    /**
+     * Infrastructure shutdown barrier, called on Paper main before consumer flush hooks.
+     * Settles queued/source-waiting main work and rejects future deferred dispatch, without cancelling
+     * source operations or closing worker admission. Inline {@link #main(Runnable)} cleanup still runs
+     * on main; {@link #close()} later drains workers and rejects all main execution.
+     */
+    public void quiesceMainThread() { main.quiesce(); }
+
     @Override public void close() {
         main.close(); // Release workers waiting for main before draining any backend.
         workers.close();

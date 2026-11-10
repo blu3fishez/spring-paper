@@ -138,6 +138,37 @@ class ManagedMainExecutionTest {
             assertEquals("converted item", result.join());
         }
     }
+    @Test void aReentrantMainQuiesceSettlesQueuedWorkAndPreservesCurrentInlineCleanup() {
+        var host = new Host();
+        Thread main = Thread.currentThread();
+        when(host.server.isPrimaryThread()).thenAnswer(call -> Thread.currentThread() == main);
+        try (var tasks = host.tasks()) {
+            var mutations = new AtomicInteger();
+            var queued = tasks.nextTick(mutations::incrementAndGet);
+            var current = tasks.main(() -> {
+                tasks.quiesceMainThread();
+                tasks.main(mutations::incrementAndGet).join();
+            });
+            current.join();
+            assertTrue(queued.isCompletedExceptionally());
+            host.deliveries.remove().run();
+            assertEquals(1, mutations.get());
+        }
+    }
+    @Test void anOffThreadQuiesceIsRejectedWithoutClosingMainAdmission() throws Exception {
+        var host = new Host();
+        Thread main = Thread.currentThread();
+        when(host.server.isPrimaryThread()).thenAnswer(call -> Thread.currentThread() == main);
+        try (var tasks = host.tasks()) {
+            var attempted = tasks.async(() -> { tasks.quiesceMainThread(); return null; });
+            assertInstanceOf(IllegalStateException.class,
+                    assertThrows(java.util.concurrent.ExecutionException.class,
+                            () -> attempted.get(2, TimeUnit.SECONDS)).getCause());
+            var pending = tasks.nextTick(() -> "still active");
+            host.deliveries.remove().run();
+            assertEquals("still active", pending.join());
+        }
+    }
     private static class Host {
         final JavaPlugin plugin = mock(JavaPlugin.class);
         final Server server = mock(Server.class);

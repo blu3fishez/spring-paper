@@ -37,7 +37,8 @@ UI 취소는 upstream read/commit을 취소하지 않는다. session·revision·
 취소를 소비자에게 노출하려면 **관리형 Future 자체**를 반환한다. `whenComplete` 등으로 새로 만든
 종속 Future의 cancel은 원본 취소를 자동 전파하지 않는다. 로깅 observer를 붙이고 원본을 반환하는
 패턴을 business-plugin이 사용한다. 플러그인보다 먼저 닫히는 기능은 TraceConversionService처럼
-자기가 기다리는 관리형 Future를 취소한다.
+자기가 기다리는 관리형 Future를 취소한다. 플러그인 전체 종료를 위해 기능마다 pending 집합과
+종료 훅·flush 선행 관계를 다시 만들 필요는 없다. 아래 main 종료 barrier가 공통 대기를 먼저 해제한다.
 
 다음 코드는 callback을 막을 수 있어도 callerOwned의 완료를 보장하지 못한다.
 
@@ -83,9 +84,22 @@ PaperTasks는 외부 backend를 닫거나 interrupt하지 않는다. 자기에�
 
 ## 종료·남는 한계
 
-입력/업무 종료 → 예약 생산 중단 → main Future 실패·native 취소 → worker drain → Spring 파괴 순서다.
-main 결과를 먼저 실패시켜 main을 기다리는 worker가 종료를 막지 않게 한다. 업무 종료의 최종 저장은
-DB-only completion이어야 한다. Paper main에서 worker→main 결과를 join하면 실행 중에도 교착하므로 금지한다.
+입력 차단 → 예약 생산 중단·native tick 취소 → main 대기 실패 완료 → 사용자 main 종료 훅·DB flush →
+worker drain → Spring 파괴 순서다. 동기 `onDisable` 중에는 다음 tick을 실행할 수 없다. main 결과를
+사용자 flush보다 먼저 실패시켜, 같은 플레이어 큐의 앞에서 main을 기다리던 worker가 최종 DB 저장을
+막지 않게 한다. source가 미완료인 관리형 continuation도 이때 실패하지만 source I/O는 취소하지 않는다.
+
+Bootstrap이 `PaperTasks.quiesceMainThread()`를 Paper main에서 자동 호출한다. 일반 소비자는 새 종료
+단계를 등록하지 않는다. 이 인프라 barrier 뒤에는 `nextTick`과 worker→main 예약이 실패한다.
+이미 main인 종료 훅의 `main(Runnable)`은 즉시 정리할 수 있고, worker는 최종 DB-only 저장을 계속
+받는다. 최종 `close()`가 모든 main 실행을 거절하고 worker를 drain한다. 단독 호스트가 bootstrap을
+대신할 때만 같은 barrier→최종 저장→close 순서를 소유하며, off-main barrier 호출은 거절한다.
+이 순서는 부분 startup 실패의 정리에도 같다. 종료 중 업무 callback을 대신 실행하지 않는다.
+
+Spring `ContextClosedEvent`는 worker drain 뒤 실제 context 파괴 단계에 남긴다. 이 event를 미리
+발행하면 일반 Spring executor가 새 작업을 거절하여 최종 DB flush가 제출되지 않을 수 있다.
+업무 종료의 최종 저장은 DB-only completion이어야 한다. Paper main에서 worker→main 결과를 join하면
+실행 중에도 교착하므로 금지한다. 세션·revision·이미 수락한 commit의 복구 여부는 도메인 소유자가 판단한다.
 공유 executor에 무한 대기하는 I/O를 안전하게 강제 중단할 수 없다. 예산을 넘으면 관리형 결과는 실패해도
 실제 I/O는 나중에 커밋할 수 있다. DB timeout·트랜잭션·멱등성/outbox는 소비자 저장 계약으로 유지한다.
 

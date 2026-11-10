@@ -69,7 +69,7 @@ public final class PaperTickScheduler implements java.util.concurrent.Executor, 
         if (!isActive()) throw new TaskRejectedException("Spring Paper tick scheduler is stopped");
     }
     @Override public void close() {
-        // Stop remaining plugin-owned callbacks after feature flush hooks, before worker drain.
+        // Stop plugin-owned producers before managed main quiesce and feature flush hooks.
         // PaperTasks then resolves futures whose native callbacks were cancelled.
         if (closed.compareAndSet(false, true)) scheduler.cancelTasks(plugin);
     }

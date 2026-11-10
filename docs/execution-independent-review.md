@@ -76,3 +76,30 @@ create가 미응답이거나 실제 커밋 뒤 실패한 경우에는 소유권�
 
 이 검토의 제어 가능한 Paper 경계와 Spring 통합 테스트는 실제 Minecraft 클라이언트,
 MariaDB/Redis 네트워크 장애, 장시간 메모리·thread 부하, 모든 외부 executor/FactoryBean 조합을 대신하지 않는다.
+
+## 소비자 flush에서 발견한 main 종료 순서 보완
+
+이후 실제 SimpleExtraction UUID 큐와 recipe quit save를 대조하여 기존 설명의 빈틈을 재현했다.
+`PaperTasks.close()` 자체는 main을 먼저 실패시키지만 bootstrap이 이를 사용자 종료 훅 뒤에 호출했다.
+앞선 worker가 다음 tick의 projection을 기다리면 사용자 recipe flush가 같은 큐 뒤에서 교착했다.
+기능마다 관리형 main Future를 추적하고 flush보다 먼저 닫는 패치는 같은 공통 책임을 반복한다.
+
+기존 dispatcher의 pending ledger와 facade를 유지하고 `quiesceMainThread()` barrier 한 개를 추가했다.
+Bootstrap은 입력과 예약 생산자·native tick을 중단한 뒤 barrier를 호출하고 사용자 종료 훅을 실행한다.
+barrier는 대기 중인 관리형 결과를 실패시키며 source와 worker admission은 유지한다. main 종료 훅의
+즉시 정리도 유지하고, 사용자 DB flush 뒤 기존 close가 worker를 drain한다. 새 executor·Future 집합·
+Spring lifecycle 대체 계층·phase 표는 없다. `Lifecycle.stop/isRunning`에 main-only 의미를 넣으면
+worker는 여전히 작업을 받으므로 그 표준 계약으로 위장하지 않았다.
+
+일반 소비자는 기존 `nextTick`을 사용하면 된다. 기능별 UI pending 집합·전체 종료용 close·recipe/guide
+선행 관계를 제거할 수 있는 만큼 복잡도가 줄며, 그 코드를 다른 기능별 설정으로 옮긴 것이 아니다.
+플러그인보다 먼저 닫히는 기능의 취소·세션/revision fence·내구성 복구는 실제 도메인 책임으로 남는다.
+Spring 7.0.10 `doClose`와 `ExecutorConfigurationSupport.onApplicationEvent`를 다시 읽어, 표준 close
+event를 조기 발행하면 consumer executor가 최종 DB 제출을 거절할 수 있음을 확인했다.
+
+`MainThreadShutdownBarrierTest` 3개를 수정 전에 실행하여 모두 실패시켰다. 실제 종료 훅에서 같은
+큐를 잇는 최종 저장이 timeout됐고, 부분 startup 정리도 실패했으며, 미완료 source의 UI 결과가
+종료 훅에 열린 채 도착했다. 수정 후 세 경로와 이미 수락한 DB commit·뒤따르는 저장·자원 파괴,
+stale native callback 차단·source 비취소·inline main 정리를 확인했다. off-main 거절과 재진입 중인
+main 정리도 별도 검증했다. Java 25에서 `:spring-paper-core:test verifySourceSize --max-workers=2`가
+통과했으며 core 테스트 114개는 실패·오류·skip이 없다. 실제 게임 서버나 네트워크 검증은 추가하지 않았다.
