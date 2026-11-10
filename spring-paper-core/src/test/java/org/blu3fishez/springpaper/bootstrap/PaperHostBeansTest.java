@@ -132,10 +132,12 @@ class PaperHostBeansTest {
         Thread main = Thread.currentThread();
         Host plugin = mock(Host.class);
         Server server = mock(Server.class);
+        when(server.getScheduler()).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
         when(server.isPrimaryThread()).thenAnswer(ignored -> Thread.currentThread() == main);
         when(server.getMinecraftVersion()).thenReturn("26.3");
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getName()).thenReturn("Host");
+        when(plugin.namespace()).thenReturn("host");
         when(plugin.getLogger()).thenReturn(Logger.getAnonymousLogger());
         when(plugin.getDataFolder()).thenReturn(new java.io.File("build/test-data/absent"));
         when(plugin.getResource(anyString())).thenAnswer(ignored -> new ByteArrayInputStream(new byte[0]));

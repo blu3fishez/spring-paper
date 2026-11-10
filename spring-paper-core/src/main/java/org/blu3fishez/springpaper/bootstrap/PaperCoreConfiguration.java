@@ -4,8 +4,14 @@ import java.util.Map;
 import java.util.logging.Logger;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.PaperServerInfo;
+import org.blu3fishez.springpaper.config.PaperPluginInfo;
+import org.blu3fishez.springpaper.config.PaperBukkitConfiguration;
+import org.blu3fishez.springpaper.key.PaperKeys;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
 import org.blu3fishez.springpaper.task.PaperTasks;
+import org.blu3fishez.springpaper.task.PaperMainThreadTaskScheduler;
+import org.blu3fishez.springpaper.task.PaperTickScheduler;
+import org.blu3fishez.springpaper.world.PaperChunkTickets;
 import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -22,6 +28,7 @@ public class PaperCoreConfiguration {
     private final Logger logger;
     private final PaperConfiguration configuration;
     private final PaperServerInfo serverInfo;
+    private final PaperPluginInfo pluginInfo;
     private final PaperThreadAccess threadAccess;
 
     private PaperCoreConfiguration(JavaPlugin plugin, PaperConfiguration configuration) {
@@ -29,6 +36,7 @@ public class PaperCoreConfiguration {
         this.server = plugin.getServer();
         this.logger = plugin.getLogger();
         this.configuration = configuration;
+        this.pluginInfo = PaperPluginInfo.capture(plugin);
         this.serverInfo = new PaperServerInfo(server.getMinecraftVersion(), server.getBukkitVersion(),
                 server.getVersion(), Runtime.version().toString());
         this.threadAccess = server::isPrimaryThread;
@@ -42,7 +50,8 @@ public class PaperCoreConfiguration {
         context.registerBean(configurationName, PaperCoreConfiguration.class, () -> captured);
         Map<String, Object> hosts = Map.of("paperPlugin", captured.paperPlugin(), "paperServer", captured.paperServer(),
                 "paperLogger", captured.paperLogger(), "paperConfiguration", captured.paperConfiguration(),
-                "paperServerInfo", captured.paperServerInfo(), "paperThreadAccess", captured.paperThreadAccess());
+                "paperServerInfo", captured.paperServerInfo(), "paperThreadAccess", captured.paperThreadAccess(),
+                "paperPluginInfo", captured.paperPluginInfo());
         hosts.forEach(context.getBeanFactory()::registerSingleton);
         context.addBeanFactoryPostProcessor(beans -> hosts.forEach((name, instance) -> {
             var definition = beans.getBeanDefinition(name);
@@ -67,6 +76,7 @@ public class PaperCoreConfiguration {
     @Bean(destroyMethod = "") public Logger paperLogger() { return logger; }
     @Bean(destroyMethod = "") public PaperConfiguration paperConfiguration() { return configuration; }
     @Bean(destroyMethod = "") public PaperServerInfo paperServerInfo() { return serverInfo; }
+    @Bean(destroyMethod = "") public PaperPluginInfo paperPluginInfo() { return pluginInfo; }
     @Bean(destroyMethod = "") public PaperThreadAccess paperThreadAccess() { return threadAccess; }
 
     // PostProcessor를 만드는 @Bean은 static으로 선언해 이 configuration과 그 의존 빈의 조기 생성을 피한다.
@@ -77,5 +87,18 @@ public class PaperCoreConfiguration {
     }
     @Bean(WORKERS_BEAN_NAME) public PaperTasks paperTasks(JavaPlugin plugin, PaperConfiguration configuration) {
         return new PaperTasks(plugin, configuration);
+    }
+    // Explicit scheduler selection keeps an unqualified @Scheduled/TaskScheduler on background work.
+    @Bean(name = PaperMainThreadTaskScheduler.BEAN_NAME, defaultCandidate = false, destroyMethod = "")
+    public PaperMainThreadTaskScheduler paperMainThreadScheduler(PaperTasks tasks) {
+        return new PaperMainThreadTaskScheduler(tasks);
+    }
+    @Bean(PaperTickScheduler.BEAN_NAME)
+    public PaperTickScheduler paperTickScheduler(JavaPlugin plugin) { return new PaperTickScheduler(plugin); }
+    @Bean(PaperChunkTickets.BEAN_NAME)
+    public PaperChunkTickets paperChunkTickets(JavaPlugin plugin) { return new PaperChunkTickets(plugin); }
+    @Bean public PaperKeys paperKeys(PaperPluginInfo info) { return new PaperKeys(info.namespace()); }
+    @Bean public PaperBukkitConfiguration paperBukkitConfiguration(JavaPlugin plugin) {
+        return new PaperBukkitConfiguration(plugin);
     }
 }

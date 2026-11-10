@@ -96,6 +96,7 @@ class PaperAdmissionIntegrationTest {
         when(host.getServer()).thenReturn(server);
         when(host.isEnabled()).thenReturn(true);
         when(host.getName()).thenReturn("SecurityTest");
+        when(host.namespace()).thenReturn("securitytest");
         when(host.getLogger()).thenReturn(Logger.getLogger("security-test"));
         when(host.getDataFolder()).thenReturn(new java.io.File("build/security-test/absent"));
         when(host.getResource(anyString())).thenAnswer(ignored -> new ByteArrayInputStream(

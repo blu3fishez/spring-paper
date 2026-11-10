@@ -137,9 +137,11 @@ class ApplicationLifecycleTest {
         mainThread = Thread.currentThread();
         T plugin = mock(type);
         Server server = mock(Server.class);
+        when(server.getScheduler()).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
         when(server.isPrimaryThread()).thenAnswer(ignored -> Thread.currentThread() == mainThread);
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getName()).thenReturn("Test");
+        when(plugin.namespace()).thenReturn("test");
         when(plugin.getLogger()).thenReturn(Logger.getLogger("test"));
         when(plugin.getDataFolder()).thenReturn(new java.io.File("build/test-data/absent"));
         when(plugin.getResource(anyString())).thenAnswer(ignored -> new ByteArrayInputStream(new byte[0]));

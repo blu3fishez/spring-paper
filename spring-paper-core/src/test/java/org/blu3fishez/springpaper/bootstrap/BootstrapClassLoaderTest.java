@@ -41,10 +41,12 @@ class BootstrapClassLoaderTest {
     @Test void constructsSpringInfrastructureWithThePluginLoaderAndRestoresTheHostLoader() throws Exception {
         Host plugin = mock(Host.class);
         Server server = mock(Server.class);
+        when(server.getScheduler()).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
         Thread paperThread = Thread.currentThread();
         when(server.isPrimaryThread()).thenAnswer(call -> Thread.currentThread() == paperThread);
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getName()).thenReturn("Isolated");
+        when(plugin.namespace()).thenReturn("isolated");
         when(plugin.getDataFolder()).thenReturn(directory.toFile());
         when(plugin.getLogger()).thenReturn(Logger.getLogger("class-loader-test"));
         when(plugin.getResource(anyString())).thenAnswer(call -> new ByteArrayInputStream(new byte[0]));

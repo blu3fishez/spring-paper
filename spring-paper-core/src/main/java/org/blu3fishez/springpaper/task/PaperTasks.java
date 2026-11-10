@@ -31,6 +31,9 @@ public final class PaperTasks implements java.util.concurrent.Executor, AutoClos
         try { return CompletableFuture.supplyAsync(action, this); }
         catch (RejectedExecutionException stopped) { return CompletableFuture.failedFuture(stopped); }
     }
+    public CompletableFuture<Void> run(Runnable action) {
+        return async(() -> { action.run(); return null; });
+    }
     /** Standard executor bridge so integrations reuse the existing plugin-owned workers. */
     @Override public void execute(Runnable action) {
         if (closed) throw new RejectedExecutionException("Spring Paper is stopping");

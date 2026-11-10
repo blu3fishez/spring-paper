@@ -55,7 +55,7 @@ public class PaperConnectionSecurityConfiguration {
             fallback(beans, registry, PaperSecurityResultHandler.class, "paperSecurityResultHandler",
                     () -> (result, failure) -> CompletableFuture.completedFuture(null));
             fallback(beans, registry, PaperSecurityFilterChain.class, "paperDefaultSecurityFilterChain", () -> new PaperSecurity().build());
-            if (beans.getBeanNamesForType(TaskScheduler.class, false, false).length == 0) {
+            if (!hasDefaultScheduler(beans)) {
                 var definition = new RootBeanDefinition(ThreadPoolTaskScheduler.class);
                 definition.getPropertyValues().add("poolSize", 1).add("threadNamePrefix", "spring-paper-security-")
                         .add("daemon", true).add("removeOnCancelPolicy", true).add("clock", new RuntimeBeanReference(Clock.class));
@@ -68,6 +68,17 @@ public class PaperConnectionSecurityConfiguration {
                 registry.registerBeanDefinition("paperConnectionSecurityService", definition);
             }
         };
+    }
+    private static boolean hasDefaultScheduler(ConfigurableListableBeanFactory beans) {
+        for (String name : beans.getBeanNamesForType(TaskScheduler.class, false, false)) {
+            if (!beans.containsBeanDefinition(name)) return true;
+            var definition = beans.getBeanDefinition(name);
+            // Spring's qualifier-only beans are not candidates for an unqualified constructor.
+            // Respect that contract rather than coupling security to a Paper scheduler name/type.
+            if (definition.isAutowireCandidate() && (!(definition instanceof AbstractBeanDefinition candidate)
+                    || candidate.isDefaultCandidate())) return true;
+        }
+        return false;
     }
     private static <T> void fallback(ConfigurableListableBeanFactory beans, BeanDefinitionRegistry registry,
                                     Class<T> type, String name, Supplier<T> factory) {

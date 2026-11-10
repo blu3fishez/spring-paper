@@ -26,6 +26,9 @@ import org.blu3fishez.springpaper.spi.PaperEventOrderContributor;
 import org.blu3fishez.springpaper.spi.PaperEventOrderConfigurer;
 import org.blu3fishez.springpaper.spi.SpringPaperModule;
 import org.blu3fishez.springpaper.task.PaperTasks;
+import org.blu3fishez.springpaper.task.PaperMainThreadTaskScheduler;
+import org.blu3fishez.springpaper.task.PaperTickScheduler;
+import org.blu3fishez.springpaper.world.PaperChunkTickets;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -160,7 +163,13 @@ public final class SpringPaperApplication implements AutoCloseable {
             // 부분 시작 실패의 정리에서는 getBean으로 새 자원을 만들지 않고 이미 생성된 singleton만 조회한다.
             AutoCloseable workers = context.getBeanFactory().getSingleton(PaperCoreConfiguration.WORKERS_BEAN_NAME)
                     instanceof PaperTasks tasks ? tasks : null;
-            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, workers, context }) {
+            AutoCloseable scheduler = context.getBeanFactory().getSingleton(PaperMainThreadTaskScheduler.BEAN_NAME)
+                    instanceof PaperMainThreadTaskScheduler tasks ? tasks : null;
+            AutoCloseable ticks = context.getBeanFactory().getSingleton(PaperTickScheduler.BEAN_NAME)
+                    instanceof PaperTickScheduler tasks ? tasks : null;
+            AutoCloseable tickets = context.getBeanFactory().getSingleton(PaperChunkTickets.BEAN_NAME)
+                    instanceof PaperChunkTickets chunks ? chunks : null;
+            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, scheduler, tickets, ticks, workers, context }) {
                 if (resource == null) continue;
                 try { resource.close(); }
                 catch (Exception error) {

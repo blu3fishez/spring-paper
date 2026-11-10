@@ -223,9 +223,11 @@ class ConsumerBootstrapTest {
         paperThread = Thread.currentThread();
         T host = mock(type);
         Server server = mock(Server.class);
+        when(server.getScheduler()).thenReturn(mock(org.bukkit.scheduler.BukkitScheduler.class));
         when(server.isPrimaryThread()).thenAnswer(call -> Thread.currentThread() == paperThread);
         when(host.getServer()).thenReturn(server);
         when(host.getName()).thenReturn("Consumer");
+        when(host.namespace()).thenReturn("consumer");
         when(host.getLogger()).thenReturn(Logger.getLogger("consumer-test"));
         when(host.getDataFolder()).thenReturn(new java.io.File("build/test-data/absent-consumer"));
         when(host.getResource(anyString())).thenAnswer(call -> new ByteArrayInputStream(new byte[0]));
