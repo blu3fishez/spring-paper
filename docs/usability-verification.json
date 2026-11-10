@@ -44,11 +44,11 @@
         "net_lines": -5
       },
       "test": {
-        "before_lines": 706,
-        "after_lines": 990,
-        "changed_files": 8,
+        "before_lines": 820,
+        "after_lines": 1111,
+        "changed_files": 9,
         "added_files": 3,
-        "net_lines": 284
+        "net_lines": 291
       }
     }
   },
@@ -276,6 +276,42 @@
       "spring-paper-business-example-0.1.0-SNAPSHOT.jar": "4553037e12ea36c0239152c7be51f51c4d7243e4ed34391585ac986d91af40da",
       "spring-paper-approval-example-0.1.0-SNAPSHOT.jar": "fd2ad39ce0ed21e561637675cf2a522b9cadebe450364ca335eabf753ac23134",
       "spring-paper-jdbc-example-0.1.0-SNAPSHOT.jar": "7f625ffd6756d4d0a3c77922f84a45263ee04b28e1185a5ed9f7674fef189d12"
+    },
+    "runPaper_injected_artifact": {
+      "path": "examples/minimal-plugin/build/libs/spring-paper-minimal-example-0.1.0-SNAPSHOT.jar",
+      "sha256": "eb5e85838925ef4bca21d1515f7b50dbf4be94bb42cf4d63486e3dc200a15fbe"
     }
+  },
+  "verification_notes": [
+    {
+      "check": "consumer event order",
+      "observation": "One full run had an empty ResourcePackListener#onAttack call list. Focused role, all 7 composition tests and final full build passed afterwards. Root cause not confirmed; candidate/registration/invocation diagnostics added.",
+      "test_disabled": false
+    }
+  ],
+  "consumer_artifact": {
+    "date": "2026-11-11",
+    "library_commit": "5631729d70bd589912636e5d41473f71aaf529f3",
+    "artifact": "build/libs/SimpleExtraction.jar",
+    "sha256": "8bf62455f4b327f8d63af4570b4fe7b419195217b19a0385a5b0a6243a6f21fb",
+    "included_modules": [
+      "config",
+      "core",
+      "data-jpa",
+      "data-jdbc",
+      "data-pdc",
+      "cache"
+    ],
+    "verified_current_library_classes": 108,
+    "zip_duplicates": 0,
+    "forbidden_packages": {
+      "org/springframework/boot/": 0,
+      "org/bukkit/": 0,
+      "org/slf4j/": 0,
+      "com/google/inject/": 0,
+      "lombok/": 0
+    },
+    "deployment_or_restart": false,
+    "client_login_tested": false
   }
 }
