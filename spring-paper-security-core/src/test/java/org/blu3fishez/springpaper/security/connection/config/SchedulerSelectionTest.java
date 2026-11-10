@@ -60,4 +60,39 @@ class SchedulerSelectionTest {
             backend.shutdownNow();
         }
     }
+    @Test void blockedMaintenanceCannotDelaySecurityExpiry() throws Exception {
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var expired = new java.util.concurrent.CompletableFuture<String>();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean("maintenanceScheduler", org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler.class,
+                    org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler::new);
+            context.registerBean(PaperSecuritySettings.class, () -> new PaperSecuritySettings(
+                    java.time.Duration.ofMillis(100), java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1)));
+            context.registerBean(org.blu3fishez.springpaper.security.connection.api.PaperSecurityFilterChain.class,
+                    () -> new PaperSecurity().addFilter((exchange, next) -> java.util.concurrent.CompletableFuture.completedFuture(
+                            org.blu3fishez.springpaper.security.connection.domain.PaperSecurityDecision.pending(
+                                    new org.blu3fishez.springpaper.security.connection.domain.PaperAuthenticationChallenge("approval", java.util.Map.of()), null))).build());
+            context.registerBean(org.blu3fishez.springpaper.security.connection.spi.PaperSecurityResultHandler.class,
+                    () -> (session, error) -> {
+                        if (session.status() == org.blu3fishez.springpaper.security.connection.domain.PaperSecuritySession.Status.EXPIRED)
+                            expired.complete(session.reason());
+                        return java.util.concurrent.CompletableFuture.completedFuture(null);
+                    });
+            context.register(PaperConnectionSecurityConfiguration.class);
+            context.refresh();
+            context.getBean("maintenanceScheduler", TaskScheduler.class).schedule(() -> {
+                entered.countDown();
+                try { release.await(); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+            }, java.time.Instant.now());
+            try {
+                assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS));
+                var connection = PaperSecurityConnection.create(java.util.UUID.randomUUID(), "Waiting");
+                var pending = context.getBean(PaperConnectionSecurityService.class).open(new PaperSecurityRequest(
+                        connection, PaperSecurityRequest.Stage.CONNECT, null)).toCompletableFuture().get(2, java.util.concurrent.TimeUnit.SECONDS);
+                assertEquals(org.blu3fishez.springpaper.security.connection.domain.PaperSecuritySession.Status.PENDING, pending.status());
+                assertEquals("expired", expired.get(2, java.util.concurrent.TimeUnit.SECONDS));
+            } finally { release.countDown(); }
+        }
+    }
 }

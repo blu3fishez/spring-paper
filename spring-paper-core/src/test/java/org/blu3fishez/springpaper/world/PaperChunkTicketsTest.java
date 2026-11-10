@@ -50,6 +50,17 @@ class PaperChunkTicketsTest {
             verify(host.world).removePluginChunkTicket(4, 8, host.plugin);
         }
     }
+    @Test void nativeRemovalFailureRetainsOwnershipForTheSameLeaseToRetry() {
+        var host = new Host();
+        try (var tickets = new PaperChunkTickets(host.plugin)) {
+            var lease = tickets.acquire(host.world, 4, 8);
+            when(host.world.removePluginChunkTicket(4, 8, host.plugin))
+                    .thenThrow(new IllegalStateException("host removal failed")).thenReturn(true);
+            assertThrows(IllegalStateException.class, lease::close);
+            lease.close();
+            verify(host.world, times(2)).removePluginChunkTicket(4, 8, host.plugin);
+        }
+    }
     private static final class Host {
         final JavaPlugin plugin = mock(JavaPlugin.class);
         final Server server = mock(Server.class);

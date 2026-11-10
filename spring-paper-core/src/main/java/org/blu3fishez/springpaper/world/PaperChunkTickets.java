@@ -34,7 +34,11 @@ public final class PaperChunkTickets implements AutoCloseable {
         Reference reference = references.get(key);
         if (reference == null) return;
         if (reference.count > 1) references.put(key, new Reference(reference.count - 1, reference.owned));
-        else { references.remove(key); removeOwned(key, reference); }
+        else {
+            // Retain ownership if the host rejects removal; the same lease can retry safely.
+            removeOwned(key, reference);
+            references.remove(key);
+        }
     }
     private void removeOwned(Key key, Reference reference) {
         World world = plugin.getServer().getWorld(key.worldId);
