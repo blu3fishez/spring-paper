@@ -10,20 +10,21 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Marker;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.Server;
 import org.springframework.stereotype.Service;
 
 /** Invoked by the console command on the real Paper thread; no API-only ItemMeta stand-in. */
 @Service
 @RequiredArgsConstructor
 public final class ExamplePdcVerificationService {
-    private final JavaPlugin plugin;
+    private final Server server;
+    private final org.blu3fishez.springpaper.key.PaperKeys keys;
     private final ExampleEntityTags entities;
     private final ExampleItemTags items;
 
     public String verify() {
         UUID owner = UUID.fromString("3342edc1-2e3f-4f5a-b745-8e30c02b9ddd");
-        var world = plugin.getServer().getWorlds().getFirst();
+        var world = server.getWorlds().getFirst();
         var entity = world.spawn(world.getSpawnLocation(), Marker.class);
         try {
             entity.getPersistentDataContainer().set(key("example/island"), PersistentDataType.LONG, 82L);
@@ -49,7 +50,7 @@ public final class ExamplePdcVerificationService {
         require(name.equals(copy.getItemMeta().displayName()), "unrelated ItemMeta preservation");
         return "pdc=entity+item+legacy+clone+remove";
     }
-    private NamespacedKey key(String value) { return new NamespacedKey(plugin, value); }
+    private NamespacedKey key(String value) { return keys.key(value); }
     private static void require(boolean condition, String check) {
         if (!condition) throw new IllegalStateException("PDC verification failed: " + check);
     }

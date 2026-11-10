@@ -132,7 +132,7 @@ PaperLifecycleRelation checkpointBeforeSessionCleanup(
 
 훅이 소유하는 자원은 start/ready 이후에 획득한다. 아직 시작을 시도하지 않은 훅은 종료 때 호출하지 않는다. 컨텍스트 생성 중 획득할 DB·네트워크 자원은 별도 Spring 빈으로 두고 Spring의 정상 destruction 계약으로 정리한다.
 
-실행 순서는 설정 로딩·initializer → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → 메인 스레드 예약·청크 lease·native tick 작업 취소 → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리한다. 기본 실패 정책은 해당 플러그인을 실패시키며, 소비자가 `SpringPaperPlugin.onApplicationStartupFailure`를 재정의해 정리 후의 서버 운영 정책을 선택할 수 있다.
+실행 순서는 설정 로딩·initializer → 작업자 컨텍스트 준비·인프라 초기화 완료 대기 → 메인 스레드 사용자 start → 이벤트·명령 연결 → `PaperApplicationReadyEvent`다. 종료는 입력 연결 해제 → 사용자 stop → Spring 주기 작업 생산 중단 → 메인 스레드 예약·청크 lease·native tick 작업 취소 → 코어 워커의 새 작업 차단·진행 작업 대기 → 컨텍스트와 인프라 정리다. 부분 실패에서도 이미 만든 자원을 정리한다. 기본 실패 정책은 해당 플러그인을 실패시키며, 소비자가 `SpringPaperPlugin.onApplicationStartupFailure`를 재정의해 정리 후의 서버 운영 정책을 선택할 수 있다.
 
 일반 Spring `@PostConstruct`와 `SmartLifecycle`은 컨텍스트 준비 작업자에서 실행될 수 있다. Paper 상태 변경은 `@OnPaperMainThreadStartup/@OnPaperMainThreadShutdown`, ready 이벤트 또는 `PaperTasks.main`에서 수행한다.
 
@@ -156,7 +156,9 @@ public void checkWorldCycle() {
 ```
 
 `fixedDelay`는 실제 Paper 작업 완료 이후부터 계산한다. 서버가 멈춘 동안 반복 콜백을 계속 쌓지 않는다.
-명시적 선택용 빈(`defaultCandidate=false`)이므로 일반 백그라운드 `TaskScheduler` 및 Security의 인증 타임아웃 선택을 바꾸지 않는다.
+메인 전용 빈은 qualifier로 선택한다. 무지정 작업은 소비자의 기본 스케줄러를 사용하며, 없으면 코어의
+지연 생성된 Spring 백그라운드 스케줄러를 사용한다. 소비자의 ScheduledExecutorService도 재사용한다.
+Security는 별도 `paperSecurityScheduler`를 사용한다. 같은 이름의 소비자 빈으로만 명시적으로 교체한다.
 한 번 실행할 예약은 `TaskScheduler.schedule(action, instant)`와 반환한 `ScheduledFuture.cancel(...)`을 사용한다.
 취소는 대기 중인 Paper 콜백에도 전달되며, 실행 중인 서버 스레드를 interrupt하지 않는다. 서버 스레드에서 Future 완료를 기다리지 않는다.
 
@@ -164,6 +166,10 @@ public void checkWorldCycle() {
 `PaperTickScheduler`의 표준 `Executor.execute`는 이미 메인 스레드여도 다음 tick으로 미룬다.
 `PaperTasks.main`은 메인 스레드 호출이면 즉시 실행하고, `async`/`run`은 기존 플러그인 워커에서 실행한다.
 청크 lease는 메인 스레드에서 획득·해제하며, 마지막 lease가 닫힐 때 자신이 추가한 native 티켓만 제거한다.
+
+자세한 [예약·비동기 전환 예제와 선택 기준](docs/scheduling.md), [소비자 사용성 조사와 전후 비용](docs/productivity.md),
+[기능별 실행 예제](examples/README.md)를 제공한다. `PaperTasks`는 표준 `AsyncTaskExecutor`이므로
+`@EnableAsync`를 선택한 앱에서 `@Async("paperTasks")`로 재사용할 수 있다. 프록시를 거치는 독립 업무에만 사용한다.
 
 ## YAML과 개발 서버
 

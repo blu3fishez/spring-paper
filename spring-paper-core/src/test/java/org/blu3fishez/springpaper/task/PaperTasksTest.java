@@ -28,7 +28,8 @@ class PaperTasksTest {
             assertSame(plugin.getClass().getClassLoader(), loader.get(5, TimeUnit.SECONDS));
             assertSame(foreign, Thread.currentThread().getContextClassLoader());
             tasks.close();
-            assertThrows(java.util.concurrent.RejectedExecutionException.class, () -> tasks.execute(() -> fail("must not run")));
+            assertThrows(org.springframework.core.task.TaskRejectedException.class,
+                    () -> tasks.execute(() -> fail("must not run")));
         } finally {
             Thread.currentThread().setContextClassLoader(previous);
             tasks.close();

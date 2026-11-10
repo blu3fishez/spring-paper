@@ -1,0 +1,274 @@
+{
+  "date": "2026-11-10",
+  "baselines": {
+    "library": "2b90f06",
+    "consumer": "d1d56da1",
+    "consumer_branch": "feat/SIMEXT-90"
+  },
+  "library_tests": {
+    "spring-paper-gradle-plugin": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-security": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-jdbc": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-cache": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-core": {
+      "tests": 91,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-jpa": {
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-config": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-security-core": {
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spring-paper-data-pdc": {
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "library_test_total": 171,
+  "consumer_tests": {
+    "build/test-results/test": {
+      "tests": 268,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "common/paper/build/test-results/test": {
+      "tests": 254,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "build/test-results/paperCompositionTest": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "consumer_test_total": 529,
+  "source_delta_scope": "Java physical lines including comments, imports and blanks; excludes the pre-existing user edit",
+  "library_java_delta": {
+    "examples_java": {
+      "files": 33,
+      "added": 700,
+      "removed": 24,
+      "net": 676
+    },
+    "production_java": {
+      "files": 11,
+      "added": 486,
+      "removed": 14,
+      "net": 472
+    },
+    "tests_java": {
+      "files": 15,
+      "added": 862,
+      "removed": 2,
+      "net": 860
+    }
+  },
+  "consumer_java_delta": {
+    "production_java": {
+      "files": 11,
+      "added": 145,
+      "removed": 201,
+      "net": -56
+    },
+    "tests_java": {
+      "files": 8,
+      "added": 449,
+      "removed": 105,
+      "net": 344
+    }
+  },
+  "moved_to_library": {
+    "chunk_lease_implementation_lines": 59,
+    "chunk_lease_test_lines": 99
+  },
+  "representative_services": {
+    "PaperMailboxMaintenance.java": {
+      "consumer_path": "skyblock/infrastructure/mailbox/src/main/java/org/blu3fishez/simpleExtraction/skyblockserver/mailbox/infrastructure/paper/PaperMailboxMaintenance.java",
+      "before": {
+        "lines": 55,
+        "imports": 9,
+        "task_fields": 1,
+        "paper_lifecycle_annotations": 2,
+        "manual_schedule_sites": 1,
+        "manual_cancel_sites": 1,
+        "nested_main_execute_sites": 0
+      },
+      "after": {
+        "lines": 35,
+        "imports": 8,
+        "task_fields": 0,
+        "paper_lifecycle_annotations": 0,
+        "manual_schedule_sites": 0,
+        "manual_cancel_sites": 0,
+        "nested_main_execute_sites": 0
+      }
+    },
+    "DungeonWorldCollapseCoordinator.java": {
+      "consumer_path": "dungeon/infrastructure/worldcycle/src/main/java/org/blu3fishez/simpleExtraction/dungeonserver/worldcycle/DungeonWorldCollapseCoordinator.java",
+      "before": {
+        "lines": 276,
+        "imports": 30,
+        "task_fields": 2,
+        "paper_lifecycle_annotations": 1,
+        "manual_schedule_sites": 4,
+        "manual_cancel_sites": 3,
+        "nested_main_execute_sites": 4
+      },
+      "after": {
+        "lines": 289,
+        "imports": 34,
+        "task_fields": 2,
+        "paper_lifecycle_annotations": 1,
+        "manual_schedule_sites": 2,
+        "manual_cancel_sites": 3,
+        "nested_main_execute_sites": 4
+      }
+    },
+    "RecipeBookSynchronizationService.java": {
+      "consumer_path": "common/paper/src/main/java/org/blu3fishez/simpleExtraction/common/feature/recipebook/service/RecipeBookSynchronizationService.java",
+      "before": {
+        "lines": 117,
+        "imports": 20,
+        "task_fields": 1,
+        "paper_lifecycle_annotations": 2,
+        "manual_schedule_sites": 1,
+        "manual_cancel_sites": 1,
+        "nested_main_execute_sites": 1
+      },
+      "after": {
+        "lines": 123,
+        "imports": 22,
+        "task_fields": 0,
+        "paper_lifecycle_annotations": 2,
+        "manual_schedule_sites": 0,
+        "manual_cancel_sites": 0,
+        "nested_main_execute_sites": 0
+      }
+    }
+  },
+  "examples": {
+    "minimal-plugin": {
+      "sha256": "6922e97f2263affa2070fc47ba0058d6e0b18eaa0cd6f015de721d536c719c9c",
+      "bytes": 5804482,
+      "core_classes_matched": 62
+    },
+    "scheduling-plugin": {
+      "sha256": "ccb33616a4d133fa33f34ba97781f20fc73a4eb81be90c078fc3d9753cd89dc8",
+      "bytes": 5807552,
+      "core_classes_matched": 62
+    },
+    "jdbc-plugin": {
+      "sha256": "4b31707606c4cc634a2d8ef44803d2b23e62a641ebe358f14f21da8b522295a1",
+      "bytes": 9266063,
+      "core_classes_matched": 62
+    },
+    "approval-plugin": {
+      "sha256": "4261273350b848aab9150406f136af52da6860c3ffd84b9dde0d738c84cef682",
+      "bytes": 8799273,
+      "core_classes_matched": 62
+    },
+    "guide-plugin": {
+      "sha256": "af88f1591e508cc971feb9c9b730f6dc094a9c9f72b180b38a394c4eeaa6c297",
+      "bytes": 40117003,
+      "core_classes_matched": 62
+    }
+  },
+  "native_module_enabled": "passed_and_stopped",
+  "native_module_disabled_and_external_profile": "passed_and_stopped",
+  "native_evidence": [
+    "build/native-productivity/console.log",
+    "build/native-productivity/console-module-disabled.log"
+  ],
+  "publication": {
+    "version": "0.1.0-SNAPSHOT",
+    "repository": "build/verification-repository",
+    "consumer": "build/publication-consumer-stc0fn3s",
+    "included_build": false,
+    "configuration_cache_reused": true,
+    "jar": "build/publication-consumer-stc0fn3s/build/libs/spring-paper-publication-consumer-0.1.0-SNAPSHOT.jar",
+    "sha256": "3a6bbfe6345215786db8d3c3bc4d5511f79cbb4147d2dbe1168ec2b064124cd9",
+    "current_library_classes_verified": 146,
+    "duplicate_entries": 0,
+    "forbidden_packages": {
+      "org/springframework/boot/": 0,
+      "org/bukkit/": 0,
+      "org/slf4j/": 0,
+      "lombok/": 0
+    },
+    "module_providers": [
+      "org.blu3fishez.springpaper.pdc.internal.PdcModule",
+      "org.blu3fishez.springpaper.jpa.JpaModule",
+      "org.blu3fishez.springpaper.jdbc.JdbcModule",
+      "org.blu3fishez.springpaper.cache.CacheModule",
+      "org.blu3fishez.springpaper.security.SecurityModule"
+    ]
+  },
+  "mutations": [
+    {
+      "mutation": "fixed-delay-handoff",
+      "detected_by_test": "*PaperMainThreadTaskSchedulerTest.fixedDelayStartsAfterPaperCompletionAndDoesNotQueueWhilePaperIsStalled",
+      "failure_count": 1,
+      "restored": true
+    },
+    {
+      "mutation": "cancelled-callback-fence",
+      "detected_by_test": "*PaperTasksTest.cancellingTheFutureAlsoFencesAStaleNativeDelivery",
+      "failure_count": 1,
+      "restored": true
+    }
+  ],
+  "new_scheduling_annotations": 0,
+  "feature_files_before_after": [
+    1,
+    1
+  ],
+  "development_time_reduction_measured": false,
+  "running_development_deployed_or_restarted": false,
+  "limits": [
+    "Paper host mocks and real Spring/timers in unit tests; real MariaDB/Redis in consumer integration tests",
+    "Native examples verified; latest full consumer Paper/Velocity native boot not repeated in this step",
+    "No real player login, client UI, Discord OAuth, Velocity forwarding or long-term performance coverage",
+    "IDE uses actual typed definitions; arbitrary initializer, ServiceLoader and conditional postprocessor results cannot all be inferred statically"
+  ]
+}

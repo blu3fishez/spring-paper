@@ -12,6 +12,7 @@ import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 
 /** Explicit worker/main-thread transitions; the consumer still validates player/session revisions. */
 public final class PaperTasks implements AsyncTaskExecutor, AutoCloseable {
@@ -37,13 +38,18 @@ public final class PaperTasks implements AsyncTaskExecutor, AutoCloseable {
     }
     /** Standard executor bridge so integrations reuse the existing plugin-owned workers. */
     @Override public void execute(Runnable action) {
-        if (closed) throw new RejectedExecutionException("Spring Paper is stopping");
-        workers.execute(() -> {
-            Thread thread = Thread.currentThread();
-            ClassLoader previous = thread.getContextClassLoader();
-            thread.setContextClassLoader(plugin.getClass().getClassLoader());
-            try { action.run(); } finally { thread.setContextClassLoader(previous); }
-        });
+        if (closed) throw new TaskRejectedException("Spring Paper is stopping");
+        try {
+            workers.execute(() -> {
+                Thread thread = Thread.currentThread();
+                ClassLoader previous = thread.getContextClassLoader();
+                thread.setContextClassLoader(plugin.getClass().getClassLoader());
+                try { action.run(); } finally { thread.setContextClassLoader(previous); }
+            });
+        } catch (RejectedExecutionException stopped) {
+            // AsyncTaskExecutor callers also receive Spring's rejection type in a shutdown race.
+            throw new TaskRejectedException("Spring Paper worker rejected the task", stopped);
+        }
     }
     public CompletableFuture<Void> main(Runnable action) {
         CompletableFuture<Void> result = new CompletableFuture<>();

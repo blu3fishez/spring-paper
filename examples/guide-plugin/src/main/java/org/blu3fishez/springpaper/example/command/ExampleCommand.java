@@ -13,13 +13,17 @@ import org.blu3fishez.springpaper.example.service.OperatorService;
 import org.blu3fishez.springpaper.example.security.service.ExampleConnectionVerificationService;
 import org.blu3fishez.springpaper.task.PaperTasks;
 import org.bukkit.command.*;
-import org.bukkit.plugin.java.JavaPlugin;
+import java.util.logging.Logger;
+import org.blu3fishez.springpaper.config.PaperPluginInfo;
+import org.blu3fishez.springpaper.config.PaperServerInfo;
 
 @PaperCommandExecutor(commands = "springpaper", aliases = "sp", description = "Verify Spring Paper integrations",
         permission = "springpaper.verify", usage = "/springpaper")
 @RequiredArgsConstructor
 public final class ExampleCommand implements CommandExecutor, TabCompleter {
-    private final JavaPlugin plugin;
+    private final PaperPluginInfo plugin;
+    private final PaperServerInfo server;
+    private final Logger logger;
     private final PaperTasks tasks;
     private final NoteService notes;
     private final OperatorService operators;
@@ -41,18 +45,25 @@ public final class ExampleCommand implements CommandExecutor, TabCompleter {
                     || !first.equals(notes.readJdbc(1))) {
                 throw new IllegalStateException("JPA/cache verification failed");
             }
+            notes.ensureNote(2, "before-update");
+            notes.read(2);
+            notes.replace(2, "updated-value");
+            if (!notes.read(2).equals("updated-value")) throw new IllegalStateException("CachePut kept stale data");
+            notes.delete(2);
+            try { notes.read(2); throw new IllegalStateException("CacheEvict kept deleted data"); }
+            catch (java.util.NoSuchElementException expected) { /* committed deletion is visible */ }
             return authorized + "\n" + connectionSecurity.verify().toCompletableFuture().join() + "\n" + persistentData;
         }).whenComplete((result, error) -> tasks.main(() -> {
             if (error != null) throw new IllegalStateException("Spring Paper smoke failed", error);
             if (listener.signals() != 1 || after.getSignals() != 1 || configured.getSignals() != 1) throw new IllegalStateException("Paper event verification failed");
             try {
-                Files.createDirectories(plugin.getDataFolder().toPath());
-                Files.writeString(plugin.getDataFolder().toPath().resolve("smoke-success.txt"),
-                        "paper=" + plugin.getServer().getMinecraftVersion() + "\n" + result + "\njpa=committed\njdbc=shared-pool\ncache=hit\nevent=1\nevent-order=annotation+composition\n");
+                Files.createDirectories(plugin.dataDirectory());
+                Files.writeString(plugin.dataDirectory().resolve("smoke-success.txt"),
+                        "paper=" + server.minecraftVersion() + "\n" + result + "\njpa=committed\njdbc=shared-pool\ncache=hit\ncache-put=updated\ncache-evict=deleted\nevent=1\nevent-order=annotation+composition\n");
             } catch (java.io.IOException failure) { throw new IllegalStateException(failure); }
             sender.sendPlainMessage("SPRING_PAPER_SMOKE_OK");
         }).exceptionally(failure -> {
-            plugin.getLogger().log(java.util.logging.Level.SEVERE, "SPRING_PAPER_SMOKE_FAILED", failure);
+            logger.log(java.util.logging.Level.SEVERE, "SPRING_PAPER_SMOKE_FAILED", failure);
             return null;
         }));
         return true;

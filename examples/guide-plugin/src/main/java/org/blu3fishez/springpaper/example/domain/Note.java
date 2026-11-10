@@ -12,4 +12,5 @@ public class Note {
     protected Note() {}
     public Note(long id, String text) { this.id = id; this.text = text; }
     public String text() { return text; }
+    public void replaceText(String text) { this.text = java.util.Objects.requireNonNull(text); }
 }

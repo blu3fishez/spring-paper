@@ -151,3 +151,13 @@ Paper 기본 어댑터는 사용자 stop 단계에서 보안을 닫아 plugin wo
 - [ProviderManager](https://github.com/spring-projects/spring-security/blob/7.1.2/core/src/main/java/org/springframework/security/authentication/ProviderManager.java), [AuthenticationFilter](https://github.com/spring-projects/spring-security/blob/7.1.2/web/src/main/java/org/springframework/security/web/authentication/AuthenticationFilter.java): 증거 검증과 저장·후속 처리의 책임 분리. 인증 엔진은 Spring 구현을 사용.
 - [AbstractApplicationContext](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/AbstractApplicationContext.java), [ExecutorConfigurationSupport](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/scheduling/concurrent/ExecutorConfigurationSupport.java): close event가 lifecycle 정지보다 먼저이며 executor가 이 event에서 조기 종료함을 확인. phase만으로 해결되지 않던 실패를 회귀 테스트로 고정.
 - [DefaultLifecycleProcessor](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/support/DefaultLifecycleProcessor.java), [SimpleApplicationEventMulticaster](https://github.com/spring-projects/spring-framework/blob/v7.0.10/spring-context/src/main/java/org/springframework/context/event/SimpleApplicationEventMulticaster.java): 역 phase 정지와 supportsAsyncExecution 계약을 사용. 소비자 scheduler 설정을 바꾸지 않음.
+
+## 타임아웃 스케줄러 선택
+
+접속 보안의 타임아웃은 전용 `paperSecurityScheduler`에서 실행한다. 기본 빈은 일반 주입 후보에서
+제외되므로 `@Scheduled` 유지보수 작업이나 메인 스레드 예약에 선택되지 않는다. 소비자의 무지정
+`TaskScheduler`가 DB 작업으로 막혀 있어도 인증 대기 만료는 계속 처리한다.
+
+교체하려면 `@Bean(name = PaperConnectionSecurityConfiguration.SCHEDULER_BEAN_NAME, defaultCandidate = false)`로
+표준 TaskScheduler를 제공한다. 외부에서 소유하는 backend는 `destroyMethod = ""`로 소유권을 유지한다.
+일반 스케줄러 빈이 있다는 이유만으로 보안 타임아웃에 재사용하던 이전 동작은 이 명시적 계약으로 변경했다.

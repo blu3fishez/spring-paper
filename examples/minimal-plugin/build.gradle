@@ -1,0 +1,7 @@
+plugins { id 'org.blu3fishez.spring-paper' }
+group = 'org.blu3fishez.springpaper.example'
+version = '0.1.0-SNAPSHOT'
+dependencies {
+    compileOnly 'org.projectlombok:lombok:1.18.48'
+    annotationProcessor 'org.projectlombok:lombok:1.18.48'
+}

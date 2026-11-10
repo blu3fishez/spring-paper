@@ -1,4 +1,20 @@
-# 검증 기록 — 2026-11-09
+# 검증 기록 — 2026-11-10
+
+현재 예약·실행/유틸·예제 개선 결과는 [사용성 보고서](productivity.md)와
+[기계 판독 검증 기록](productivity-verification.json)에 분리했다.
+
+- 라이브러리 전체 build·Javadoc·600줄 검사 및 171개 자동 테스트 성공.
+- 소비자 전체 build·모듈/가이드 검사 및 529개 자동 테스트 성공(API 경계와 실제 MariaDB/Redis 포함).
+- 메인 완료 시점 fixedDelay·bounded pending callback·취소·부분 시작 실패·교착 없는 종료·빈 선택·보안 timer 격리 검증.
+- 완료 대기/취소 fence를 제거한 두 mutant 검출, 원본 복원 후 전체 build 성공.
+- 다섯 예제의 included build, 실제 Paper 26.3 build 244의 명령·스케줄/인가/JDBC/JPA/cache/PDC·정상 종료 성공.
+- 선택 모듈 활성/비활성, 외부 demo profile과 initializer, 명령 alias/반복 메타데이터 검증.
+- 독립 Maven 소비·설정 캐시 재사용 및 자체 라이브러리 클래스 146개 bytecode 일치.
+  다섯 예제도 코어 클래스 62개가 현재 배포물과 일치한다.
+- 최신 소비자 본체의 native 재기동·실제 클라이언트·Discord OAuth·장기 부하·Docker 이미지 재빌드는 이 단계에서 하지 않았다.
+  운영 중인 개발계 배포·재기동은 범위에서 제외했다.
+
+## 이전 단계 검증 — 2026-11-09
 
 Spring Paper 라이브러리의 빌드·자동 테스트·독립 Maven 소비와 격리된 실제 Paper 서버 기동/종료를 확인했다. 사용자가 EULA 수락을 명시한 뒤 ignored 로컬 설정에서만 accept-eula를 true로 사용했다. 배포 예제의 기본값은 false다.
 

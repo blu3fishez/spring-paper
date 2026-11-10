@@ -1,0 +1,3 @@
+pluginManagement { includeBuild('../..'); repositories { gradlePluginPortal(); mavenCentral() } }
+rootProject.name = 'spring-paper-minimal-example'
+includeBuild('../..')
