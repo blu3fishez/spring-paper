@@ -20,7 +20,6 @@ import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -30,6 +29,7 @@ import org.springframework.security.authentication.ProviderNotFoundException;
 /** Host-neutral Spring configuration, also importable by a consumer-owned Velocity context. */
 @Configuration(proxyBeanMethods = false)
 public class PaperConnectionSecurityConfiguration {
+    public static final String SCHEDULER_BEAN_NAME = "paperSecurityScheduler";
     @Bean public static BeanFactoryPostProcessor paperConnectionSecurityDefaults() {
         return beans -> {
             BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beans;
@@ -55,12 +55,15 @@ public class PaperConnectionSecurityConfiguration {
             fallback(beans, registry, PaperSecurityResultHandler.class, "paperSecurityResultHandler",
                     () -> (result, failure) -> CompletableFuture.completedFuture(null));
             fallback(beans, registry, PaperSecurityFilterChain.class, "paperDefaultSecurityFilterChain", () -> new PaperSecurity().build());
-            if (!hasDefaultScheduler(beans)) {
+            // Deadlines must not share the consumer's potentially blocking maintenance scheduler.
+            // Override this named bean explicitly to provide another backend; its owner closes it.
+            if (!beans.containsBean(SCHEDULER_BEAN_NAME)) {
                 var definition = new RootBeanDefinition(ThreadPoolTaskScheduler.class);
                 definition.getPropertyValues().add("poolSize", 1).add("threadNamePrefix", "spring-paper-security-")
                         .add("daemon", true).add("removeOnCancelPolicy", true).add("clock", new RuntimeBeanReference(Clock.class));
                 definition.setDestroyMethodName("shutdown");
-                registry.registerBeanDefinition("paperSecurityScheduler", definition);
+                definition.setDefaultCandidate(false);
+                registry.registerBeanDefinition(SCHEDULER_BEAN_NAME, definition);
             }
             if (beans.getBeanNamesForType(PaperConnectionSecurityService.class, false, false).length == 0) {
                 var definition = new RootBeanDefinition(PaperConnectionSecurityService.class);
@@ -68,17 +71,6 @@ public class PaperConnectionSecurityConfiguration {
                 registry.registerBeanDefinition("paperConnectionSecurityService", definition);
             }
         };
-    }
-    private static boolean hasDefaultScheduler(ConfigurableListableBeanFactory beans) {
-        for (String name : beans.getBeanNamesForType(TaskScheduler.class, false, false)) {
-            if (!beans.containsBeanDefinition(name)) return true;
-            var definition = beans.getBeanDefinition(name);
-            // Spring's qualifier-only beans are not candidates for an unqualified constructor.
-            // Respect that contract rather than coupling security to a Paper scheduler name/type.
-            if (definition.isAutowireCandidate() && (!(definition instanceof AbstractBeanDefinition candidate)
-                    || candidate.isDefaultCandidate())) return true;
-        }
-        return false;
     }
     private static <T> void fallback(ConfigurableListableBeanFactory beans, BeanDefinitionRegistry registry,
                                     Class<T> type, String name, Supplier<T> factory) {

@@ -64,7 +64,9 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     private ApplicationContext context;
 
     public PaperConnectionSecurityService(PaperSecuritySessionRepository repository, List<PaperSecurityFilterChain> chains,
-            Clock clock, TaskScheduler scheduler, PaperSecuritySettings settings, PaperAuthenticationEntryPoint entryPoint,
+            Clock clock, @org.springframework.beans.factory.annotation.Qualifier(
+                    org.blu3fishez.springpaper.security.connection.config.PaperConnectionSecurityConfiguration.SCHEDULER_BEAN_NAME)
+            TaskScheduler scheduler, PaperSecuritySettings settings, PaperAuthenticationEntryPoint entryPoint,
             PaperSecurityResultHandler results, ApplicationEventPublisher events) {
         this.repository = Objects.requireNonNull(repository); this.chains = List.copyOf(chains);
         this.clock = Objects.requireNonNull(clock); this.scheduler = Objects.requireNonNull(scheduler);

@@ -77,4 +77,22 @@ class PaperTasksTest {
         callback.getValue().run();
         assertEquals(0, calls.get());
     }
+    @Test void cancellingTheFutureAlsoFencesAStaleNativeDelivery() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getScheduler()).thenReturn(scheduler);
+        when(plugin.isEnabled()).thenReturn(true);
+        var callback = ArgumentCaptor.forClass(Runnable.class);
+        BukkitTask nativeTask = mock(BukkitTask.class);
+        when(scheduler.runTask(eq(plugin), callback.capture())).thenReturn(nativeTask);
+        try (var tasks = new PaperTasks(plugin, new PaperConfiguration(new StandardEnvironment()))) {
+            AtomicInteger calls = new AtomicInteger();
+            assertTrue(tasks.main(calls::incrementAndGet).cancel(false));
+            verify(nativeTask).cancel();
+            callback.getValue().run();
+            assertEquals(0, calls.get());
+        }
+    }
 }

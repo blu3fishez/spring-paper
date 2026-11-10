@@ -28,7 +28,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 class ConsumerConfigurationTest {
     @Configuration(proxyBeanMethods = false)
     static class ConsumerConfiguration {
-        @Bean ManualSecurityTime consumerClockAndScheduler() { return new ManualSecurityTime(); }
+        @Bean(PaperConnectionSecurityConfiguration.SCHEDULER_BEAN_NAME) ManualSecurityTime consumerClockAndScheduler() { return new ManualSecurityTime(); }
         @Bean ConsumerRepository consumerRepository(Clock clock) { return new ConsumerRepository(clock); }
         @Bean ConsumerPendingFlow consumerPendingFlow() { return new ConsumerPendingFlow(); }
         @Bean ConsumerResults consumerResults() { return new ConsumerResults(); }

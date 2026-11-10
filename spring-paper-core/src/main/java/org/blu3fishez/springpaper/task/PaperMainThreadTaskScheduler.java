@@ -38,7 +38,11 @@ public final class PaperMainThreadTaskScheduler implements TaskScheduler, BeanCl
     private ClassLoader classLoader = PaperMainThreadTaskScheduler.class.getClassLoader();
 
     public PaperMainThreadTaskScheduler(PaperTasks tasks) {
+        this(tasks, Clock.systemUTC());
+    }
+    public PaperMainThreadTaskScheduler(PaperTasks tasks, Clock clock) {
         this.tasks = Objects.requireNonNull(tasks);
+        timer.setClock(Objects.requireNonNull(clock));
         timer.setThreadNamePrefix("spring-paper-main-scheduler-");
         timer.setDaemon(true);
         timer.setRemoveOnCancelPolicy(true);

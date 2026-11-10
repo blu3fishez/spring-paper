@@ -11,9 +11,10 @@ import java.util.function.Supplier;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.springframework.core.task.AsyncTaskExecutor;
 
 /** Explicit worker/main-thread transitions; the consumer still validates player/session revisions. */
-public final class PaperTasks implements java.util.concurrent.Executor, AutoCloseable {
+public final class PaperTasks implements AsyncTaskExecutor, AutoCloseable {
     private final JavaPlugin plugin;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final int shutdownSeconds;
@@ -53,6 +54,7 @@ public final class PaperTasks implements java.util.concurrent.Executor, AutoClos
             if (task != null) task.cancel();
         });
         Runnable guarded = () -> {
+            if (result.isDone()) return;
             if (closed || !plugin.isEnabled()) { result.completeExceptionally(new IllegalStateException("Plugin is stopping")); return; }
             try { action.run(); result.complete(null); }
             catch (Throwable error) { result.completeExceptionally(error); }

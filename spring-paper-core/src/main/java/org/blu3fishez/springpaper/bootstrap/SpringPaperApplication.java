@@ -32,6 +32,8 @@ import org.blu3fishez.springpaper.world.PaperChunkTickets;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
+import org.springframework.scheduling.config.TaskManagementConfigUtils;
 
 /** One plugin-owned application, with no JVM-global context or server shutdown policy. */
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
@@ -169,7 +171,11 @@ public final class SpringPaperApplication implements AutoCloseable {
                     instanceof PaperTickScheduler tasks ? tasks : null;
             AutoCloseable tickets = context.getBeanFactory().getSingleton(PaperChunkTickets.BEAN_NAME)
                     instanceof PaperChunkTickets chunks ? chunks : null;
-            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, scheduler, tickets, ticks, workers, context }) {
+            AutoCloseable scheduled = context.getBeanFactory().getSingleton(TaskManagementConfigUtils.SCHEDULED_ANNOTATION_PROCESSOR_BEAN_NAME)
+                    instanceof ScheduledAnnotationBeanPostProcessor processor ? processor::destroy : null;
+            // Context destruction happens after worker drain. Stop Spring's periodic producers first
+            // so a scheduled job cannot enqueue new worker/main callbacks during that drain.
+            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, lifecycle, scheduled, scheduler, tickets, ticks, workers, context }) {
                 if (resource == null) continue;
                 try { resource.close(); }
                 catch (Exception error) {

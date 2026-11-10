@@ -10,6 +10,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.blu3fishez.springpaper.bootstrap.PaperCoreConfiguration;
@@ -28,6 +30,8 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.scheduling.concurrent.ConcurrentTaskScheduler;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
 
 class PaperMainThreadTaskSchedulerTest {
     @Test void oneShotCompletesOnlyAfterMainExecutionAndRestoresTheHostLoader() throws Exception {
@@ -157,6 +161,21 @@ class PaperMainThreadTaskSchedulerTest {
         @Bean ThreadPoolTaskScheduler backgroundScheduler() { return new ThreadPoolTaskScheduler(); }
         @Bean Probe scheduledProbe() { return new Probe(); }
     }
+    @Configuration(proxyBeanMethods = false)
+    @EnableScheduling
+    static class WithoutConsumerScheduler {
+        @Bean Probe scheduledProbe() { return new Probe(); }
+    }
+    @Configuration(proxyBeanMethods = false)
+    @EnableScheduling
+    static class WithConsumerExecutor {
+        @Bean(destroyMethod = "shutdown") ScheduledExecutorService consumerTimer() {
+            return Executors.newSingleThreadScheduledExecutor(action -> {
+                Thread thread = new Thread(action, "consumer-timer"); thread.setDaemon(true); return thread;
+            });
+        }
+        @Bean Probe scheduledProbe() { return new Probe(); }
+    }
     static class Probe {
         final CompletableFuture<Thread> background = new CompletableFuture<>();
         final CompletableFuture<Thread> main = new CompletableFuture<>();
@@ -165,6 +184,48 @@ class PaperMainThreadTaskSchedulerTest {
         @Scheduled(scheduler = PaperMainThreadTaskScheduler.BEAN_NAME,
                 initialDelayString = "PT0.01S", fixedDelayString = "PT60S")
         public void main() { main.complete(Thread.currentThread()); }
+    }
+
+    @Test void unqualifiedScheduledKeepsBackgroundExecutionWithoutAConsumerScheduler() throws Exception {
+        var host = new Host();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            var probe = context.getBean(Probe.class);
+            assertNotSame(Thread.currentThread(), probe.background.get(2, TimeUnit.SECONDS));
+            host.take().run();
+            assertSame(Thread.currentThread(), probe.main.get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test void consumerScheduledExecutorIsReusedAndRemainsOwnedByItsBean() throws Exception {
+        var host = new Host();
+        ScheduledExecutorService executor;
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.register(WithConsumerExecutor.class);
+            context.refresh();
+            executor = context.getBean(ScheduledExecutorService.class);
+            assertInstanceOf(ConcurrentTaskScheduler.class, context.getBean(TaskScheduler.class));
+            var probe = context.getBean(Probe.class);
+            assertEquals("consumer-timer", probe.background.get(5, TimeUnit.SECONDS).getName());
+        }
+        assertTrue(executor.isShutdown());
+    }
+
+    @Test void consumerFallbackSchedulerAlsoReplacesTheLibraryBackgroundDefault() throws Exception {
+        var host = new Host();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.registerBean("consumerFallbackScheduler", ThreadPoolTaskScheduler.class, ThreadPoolTaskScheduler::new,
+                    definition -> ((AbstractBeanDefinition) definition).setFallback(true));
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            assertFalse(context.containsBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME));
+            assertSame(context.getBean("consumerFallbackScheduler"), context.getBean(TaskScheduler.class));
+            assertNotSame(Thread.currentThread(), context.getBean(Probe.class).background.get(5, TimeUnit.SECONDS));
+        }
     }
 
     @Test void standardScheduledUsesTheRealNamedBeanAndUnqualifiedJobsKeepTheConsumerScheduler() throws Exception {

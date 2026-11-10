@@ -1,6 +1,8 @@
 package org.blu3fishez.springpaper.bootstrap;
 
 import java.util.Map;
+import java.time.Clock;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.PaperServerInfo;
@@ -15,14 +17,26 @@ import org.blu3fishez.springpaper.world.PaperChunkTickets;
 import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.beans.factory.support.AbstractBeanDefinition;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Fallback;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ConcurrentTaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.scheduling.config.TaskSchedulerRouter;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 
 @Configuration(proxyBeanMethods = false)
 public class PaperCoreConfiguration {
     public static final String WORKERS_BEAN_NAME = "paperTasks";
+    public static final String DEFAULT_SCHEDULER_BEAN_NAME = "paperDefaultTaskScheduler";
     private final JavaPlugin plugin;
     private final Server server;
     private final Logger logger;
@@ -90,8 +104,48 @@ public class PaperCoreConfiguration {
     }
     // Explicit scheduler selection keeps an unqualified @Scheduled/TaskScheduler on background work.
     @Bean(name = PaperMainThreadTaskScheduler.BEAN_NAME, defaultCandidate = false, destroyMethod = "")
-    public PaperMainThreadTaskScheduler paperMainThreadScheduler(PaperTasks tasks) {
-        return new PaperMainThreadTaskScheduler(tasks);
+    @Fallback
+    public PaperMainThreadTaskScheduler paperMainThreadScheduler(PaperTasks tasks, ObjectProvider<Clock> clocks) {
+        return new PaperMainThreadTaskScheduler(tasks, clocks.getIfAvailable(Clock::systemUTC));
+    }
+    @Bean(DEFAULT_SCHEDULER_BEAN_NAME) @Lazy @Fallback
+    public TaskScheduler paperDefaultTaskScheduler(ObjectProvider<ScheduledExecutorService> executors,
+            ObjectProvider<Clock> clocks, BeanFactory beans) {
+        Clock clock = clocks.getIfAvailable(Clock::systemUTC);
+        ScheduledExecutorService executor = executors.getIfUnique();
+        if (executor == null && beans.containsBean(TaskSchedulerRouter.DEFAULT_TASK_SCHEDULER_BEAN_NAME)
+                && beans.isTypeMatch(TaskSchedulerRouter.DEFAULT_TASK_SCHEDULER_BEAN_NAME,
+                ScheduledExecutorService.class)) {
+            executor = beans.getBean(TaskSchedulerRouter.DEFAULT_TASK_SCHEDULER_BEAN_NAME, ScheduledExecutorService.class);
+        }
+        if (executor != null) {
+            var adapter = new ConcurrentTaskScheduler(executor);
+            adapter.setClock(clock);
+            return adapter; // The consumer owns and closes its executor.
+        }
+        var scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setClock(clock);
+        scheduler.setDaemon(true);
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.setThreadNamePrefix("spring-paper-scheduler-");
+        return scheduler;
+    }
+    @Bean public static BeanFactoryPostProcessor paperSchedulingDefaults() {
+        return beans -> {
+            // Spring's TaskSchedulerRouter uses getBean by type: a lone qualifier-only scheduler is
+            // still selected there. Keep the native Spring background fallback unless a consumer
+            // provides its own default. Decide after all consumer @Bean methods have been parsed.
+            for (String name : beans.getBeanNamesForType(TaskScheduler.class, false, false)) {
+                if (name.equals(DEFAULT_SCHEDULER_BEAN_NAME)) continue;
+                // Spring's AutowireUtils is package-private. Read its public merged-definition metadata.
+                var definition = beans.containsBeanDefinition(name) ? beans.getMergedBeanDefinition(name) : null;
+                if (definition == null || definition.isAutowireCandidate()
+                        && (!(definition instanceof AbstractBeanDefinition candidate) || candidate.isDefaultCandidate())) {
+                    ((BeanDefinitionRegistry) beans).removeBeanDefinition(DEFAULT_SCHEDULER_BEAN_NAME);
+                    break;
+                }
+            }
+        };
     }
     @Bean(PaperTickScheduler.BEAN_NAME)
     public PaperTickScheduler paperTickScheduler(JavaPlugin plugin) { return new PaperTickScheduler(plugin); }
