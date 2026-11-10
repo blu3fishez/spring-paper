@@ -9,6 +9,9 @@ import javax.sql.DataSource;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.internal.DefaultBeans;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryUtils;
+import org.springframework.beans.factory.HierarchicalBeanFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -16,6 +19,7 @@ import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.SimpleAliasRegistry;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
@@ -111,12 +115,29 @@ public class JpaConfiguration {
         if (!factory.containsBean(name)) {
             throw new IllegalArgumentException(key + " must name an existing " + type.getSimpleName() + " bean: " + name);
         }
-        Class<?> actual = factory.getType(name, false);
+        Class<?> actual = predictedType(factory, name);
         // A named raw FactoryBean can expose its product type only after initialization. Do not
         // instantiate it for selection: Spring's later typed lookup validates that explicit choice.
         if (actual != null && actual != Object.class && !type.isAssignableFrom(actual)) {
             throw new IllegalArgumentException(key + " must name an existing " + type.getSimpleName() + " bean: " + name);
         }
+    }
+    private static Class<?> predictedType(BeanFactory factory, String name) {
+        // Spring 7.0.10's getType(name, false) delegates inherited lookups to parent.getType(name),
+        // which can initialize a FactoryBean. Locate the owner through public metadata first.
+        while (factory instanceof HierarchicalBeanFactory hierarchy) {
+            if (factory instanceof SimpleAliasRegistry aliases) {
+                boolean dereference = BeanFactoryUtils.isFactoryDereference(name);
+                name = aliases.canonicalName(BeanFactoryUtils.transformedBeanName(name));
+                if (dereference) name = BeanFactory.FACTORY_BEAN_PREFIX + name;
+            } else if (!hierarchy.containsLocalBean(name)) {
+                return null; // An opaque hierarchy cannot safely expose its local alias target.
+            }
+            if (hierarchy.containsLocalBean(name)) return factory.getType(name, false);
+            factory = hierarchy.getParentBeanFactory();
+        }
+        // A generic parent has no ownership metadata. Defer to the eventual typed getBean call.
+        return null;
     }
     private static void requireAvailableName(ConfigurableListableBeanFactory factory, String name, String selected, String key) {
         if (factory.containsBean(name) && !name.equals(selected)

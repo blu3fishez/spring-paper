@@ -78,6 +78,13 @@ shutdown() / close() → 새 요청 차단 + 소유한 접속 정리
 
 PaperSecurityConnection은 playerId, connectionId, name의 불변 접속 식별자다. UUID/이름 자체가 인증 증거는 아니다. 새 접속에는 새 connectionId를 만들고, 후속 콜백에는 기존 식별자를 그대로 사용한다. 같은 플레이어의 새 접속을 이전 접속의 결과로 수정하지 않는다.
 
+`disconnect`는 이 service가 관리하는 로컬 접속을 철회한다. 같은 접속의 정리가 진행 중이면 반복 호출도
+원래 저장소 삭제와 terminal handler의 완료·실패를 함께 확인한다. 정리가 끝났거나 처음부터 관리하지 않은
+접속의 호출은 아무 작업 없이 완료한다. 생성이 거절되거나 응답이 실패한 뒤 transport가 닫혀도 다른
+컨텍스트의 row를 삭제하지 않는다. 이전의 미관리 접속까지 원격 삭제하던 동작은 이 소유권 계약으로 바뀌었다.
+다른 컨텍스트의 접속을 의도적으로 철회하거나 완료된 정리 실패를 재시도할 소비자는 정확한 접속 식별자로
+`PaperSecuritySessionRepository.invalidate`를 명시적으로 호출한다. 완료한 접속의 영구 tombstone은 보관하지 않는다.
+
 PENDING은 소비자 PaperAuthenticationChallenge(type, parameters)를 담는다. 챌린지의 의미와 전달 방식은 소비자가 정한다. 최초 인증 증거를 보유할 수 있지만 이 상태는 게임 기능을 사용할 인증 완료 상태가 아니다. 기본 세션 resolver는 AUTHENTICATED만 노출한다.
 
 PaperAuthenticationEntryPoint.commence는 안내를 시작한 뒤 stage를 신속하게 완료해야 한다. 사용자가 브라우저에서 인증할 때까지 이 stage를 열어 두지 않는다. 외부 콜백에서 nonce/state·대상 계정·현재 접속·만료·일회성 소비를 검증한 뒤 authenticate를 호출한다. 접속 종료 후의 콜백은 인증을 되살릴 수 없다. 접속을 끊고 계정 연동 후 재접속시키는 정책이라면 지속 계정 연동과 새 접속의 인증은 소비자가 각각 처리한다.
@@ -90,6 +97,7 @@ PaperSecuritySessionRepository의 각 메서드는 호출 스레드에서 즉시
 
 - create는 새 connectionId만 생성하고 이미 있으면 false다. 실패한 생성으로 다른 컨텍스트의 기존 row를 지우지 않는다.
 - create=true 응답을 확인하기 전의 철회는 미확정 row를 임의로 삭제하지 않는다. 뒤늦게 true가 오면 기존 철회 상태를 유지하며 해당 row를 정리하고, false면 기존 row를 보존한다.
+- 늦은 true의 정리는 생성 당시 소유자만 사용하며 terminal handler를 다시 호출하지 않는다. 이미 진행 중인 정리 ACK와 함께 추적하되, 아직 도착하지 않은 create 응답까지 disconnect/shutdown이 기다린다는 뜻은 아니다.
 - compareAndSet은 전체 접속 식별자와 revision을 함께 검사하고 revision을 정확히 하나 증가시킨다. 만료된 expected는 실제 저장 시점에 거절한다.
 - remove는 expected revision만, invalidate는 이 정확한 접속의 모든 revision을 제거한다. playerId만으로 다른 접속을 삭제하지 않는다.
 - Redis 등을 구현한다면 서버 측 TTL/원자적 조건 검사까지 포함한다. 미리 읽은 시각만 검사하면 지연된 저장 요청이 만료 이후 인증을 복원할 수 있다.

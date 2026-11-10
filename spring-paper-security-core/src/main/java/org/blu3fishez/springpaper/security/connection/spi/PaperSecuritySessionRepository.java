@@ -17,6 +17,10 @@ public interface PaperSecuritySessionRepository {
     CompletionStage<Optional<PaperSecuritySession>> find(PaperSecurityConnection connection);
     CompletionStage<Boolean> compareAndSet(PaperSecuritySession expected, PaperSecuritySession replacement);
     CompletionStage<Boolean> remove(PaperSecuritySession expected);
-    /** Disconnect invalidates any revision of this exact connection, not another connection for the same player. */
+    /**
+     * Explicitly invalidate any revision of this exact connection, preserving other connections for the player.
+     * Consumers may call this SPI for a deliberate remote revocation. Service disconnects only clean up
+     * their own positively created rows; an unknown/failed local connection does not grant ownership here.
+     */
     CompletionStage<Optional<PaperSecuritySession>> invalidate(PaperSecurityConnection connection);
 }

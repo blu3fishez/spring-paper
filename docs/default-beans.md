@@ -46,6 +46,11 @@ JPA의 명시적인 이름 설정은 alias와 `defaultCandidate=false` 전용 �
 연결할 수 없으면 덮어쓰지 않고 시작을 거절한다. 그 자원이 JPA의 선택 대상이면 해당 이름 설정으로
 명시하고, 별도 전용 자원이면 빈 이름을 바꾼다. 이미 같은 자원을 가리키는 alias는 그대로 재사용한다.
 
+부모 컨텍스트의 명시 자원과 자식에서 부모로 연결한 alias도 같은 규칙을 따른다. Spring 7.0.10은
+상속된 `getType(name, false)`를 부모의 일반 `getType(name)`에 위임하므로, 공개 hierarchy/alias metadata로
+실제 소유 factory를 먼저 찾아 초기화 없는 타입 검사를 한다. 소유 정보를 공개하지 않는 일반 부모
+BeanFactory는 타입 검사를 실제 typed lookup까지 미룬다. 이 과정에서 다른 후보 선택 알고리즘을 만들지 않는다.
+
 worker와 Security timer는 **역할 qualifier**로 선택하며 유지보수용 기본 scheduler와 섞지 않는다.
 전용 worker도 그 역할에는 정상 후보가 된다. 설정과 소유권은 [실행 계약](execution-contracts.md)을 참고한다.
 

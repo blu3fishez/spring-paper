@@ -6,9 +6,10 @@ import lombok.RequiredArgsConstructor;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -58,7 +59,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     private final Object admissionLock = new Object();
     private final ConcurrentHashMap<UUID, Managed> managed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Operation> operations = new ConcurrentHashMap<>();
-    private final Set<CompletableFuture<Void>> cleanups = ConcurrentHashMap.newKeySet();
+    private final Map<PaperSecurityConnection, CompletableFuture<Void>> cleanups = new HashMap<>();
     private volatile boolean closed;
     private CompletableFuture<Void> shutdownResult;
     private ClassLoader loader = ContextClassLoaderScope.capture();
@@ -109,7 +110,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
                 return stale();
             }
             owner.created = true;
-            if (!active(operation)) return discard(owner.connection);
+            if (!active(operation)) return discard(owner);
             schedulePending(owner);
             return evaluate(request, initial, operation);
         }).whenComplete((session, failure) -> finish(operation, session, failure));
@@ -160,13 +161,17 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         });
     }
 
-    /** Local revocation happens immediately. The returned stage acknowledges repository/handler cleanup. */
+    /**
+     * Revoke this service's local connection immediately and acknowledge its repository/handler cleanup.
+     * Repeated calls share pending cleanup; unknown or finished connections are no-ops. Explicit remote
+     * revocation of a connection owned elsewhere belongs to {@link PaperSecuritySessionRepository#invalidate}.
+     */
     public CompletionStage<Void> disconnect(PaperSecurityConnection connection) {
-        return invalidate(connection, PaperSecuritySession.Status.CLOSED, new CancellationException("Connection disconnected"), candidate -> true);
+        return invalidate(connection, PaperSecuritySession.Status.CLOSED, new CancellationException("Connection disconnected"), candidate -> candidate != null);
     }
 
     private CompletionStage<PaperSecuritySession> evaluate(PaperSecurityRequest request, PaperSecuritySession current, Operation operation) {
-        if (!active(operation)) return discard(request.connection());
+        if (!active(operation)) return discard(operation.owner);
         var exchange = new PaperSecurityExchange(request, current, current.authentication());
         // FilterChainProxy처럼 첫 매칭 체인 하나만 실행한다. 미일치는 명시적 거절이다.
         var selected = chains.stream().filter(chain -> chain.matches(request)).findFirst().orElse(null);
@@ -179,7 +184,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
             if (cause instanceof AccessDeniedException) return new Evaluation(PaperSecurityDecision.denied("access_denied"), cause);
             throw new CompletionException(cause);
         }).thenCompose(evaluation -> {
-            if (!active(operation)) return discard(request.connection());
+            if (!active(operation)) return discard(operation.owner);
             var outcome = evaluation.decision;
             var status = switch (outcome.status()) {
                 case AUTHENTICATED -> PaperSecuritySession.Status.AUTHENTICATED;
@@ -199,7 +204,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
                         if (status != PaperSecuritySession.Status.PENDING) cancelPending(operation.owner);
                     }
                 }
-                if (!accepted) return discard(request.connection());
+                if (!accepted) return discard(operation.owner);
                 return notify(replacement, evaluation.failure).thenApply(ignored -> replacement);
             });
         });
@@ -238,18 +243,22 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     private CompletionStage<Void> invalidate(PaperSecurityConnection connection, PaperSecuritySession.Status terminal,
                                              Throwable failure, Predicate<Managed> condition) {
         Invalidation invalidation = prepareInvalidation(connection, terminal, failure, condition);
-        return invalidation == null ? CompletableFuture.completedFuture(null) : clean(invalidation);
+        if (invalidation != null) return clean(invalidation);
+        synchronized (admissionLock) {
+            var pending = cleanups.get(connection);
+            return pending == null ? CompletableFuture.completedFuture(null) : pending.minimalCompletionStage();
+        }
     }
 
     private Invalidation prepareInvalidation(PaperSecurityConnection connection, PaperSecuritySession.Status terminal,
                                             Throwable failure, Predicate<Managed> condition) {
         synchronized (admissionLock) {
             Managed revoked = owner(connection);
-            if (!condition.test(revoked)) return null;
+            if (revoked == null || !condition.test(revoked)) return null;
             if (revoked != null) { managed.remove(connection.connectionId(), revoked); cancelPending(revoked); }
             Operation operation = operations.get(connection.connectionId());
             var cleanup = new CompletableFuture<Void>();
-            cleanups.add(cleanup);
+            cleanups.put(connection, cleanup);
             return new Invalidation(connection, terminal, failure, revoked, operation, cleanup);
         }
     }
@@ -277,7 +286,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         CompletableFuture.allOf(notification.toCompletableFuture(), removal.toCompletableFuture()).whenComplete((ignored, cleanupFailure) -> {
             if (cleanupFailure == null) cleanup.complete(null);
             else { suppress(failure, unwrap(cleanupFailure)); cleanup.completeExceptionally(unwrap(cleanupFailure)); }
-            synchronized (admissionLock) { cleanups.remove(cleanup); }
+            synchronized (admissionLock) { cleanups.remove(connection, cleanup); }
         });
         return cleanup.minimalCompletionStage();
     }
@@ -307,8 +316,21 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         // public future 완료는 소비자 코드를 즉시 실행할 수 있으므로 내부 슬롯/타이머를 먼저 해제한다.
         if (outcome == null) operation.result.complete(session); else operation.result.completeExceptionally(outcome);
     }
-    private CompletionStage<PaperSecuritySession> discard(PaperSecurityConnection connection) {
-        return disconnect(connection).handle((ignored, failure) -> null).thenCompose(ignored -> stale());
+    private CompletionStage<PaperSecuritySession> discard(Managed owner) {
+        // The captured owner has a positive create ACK even after its local admission was revoked.
+        // Unknown public disconnects cannot provide that ownership. Do not notify a terminal result twice.
+        if (!owner.created) return stale();
+        var cleanup = new CompletableFuture<Void>();
+        CompletableFuture<Void> previous;
+        synchronized (admissionLock) { previous = cleanups.put(owner.connection, cleanup); }
+        var removal = stage(() -> repository.invalidate(owner.connection)).thenApply(ignored -> (Void) null);
+        var acknowledgement = previous == null ? removal.toCompletableFuture()
+                : CompletableFuture.allOf(previous, removal.toCompletableFuture());
+        acknowledgement.whenComplete((ignored, failure) -> {
+            if (failure == null) cleanup.complete(null); else cleanup.completeExceptionally(unwrap(failure));
+            synchronized (admissionLock) { cleanups.remove(owner.connection, cleanup); }
+        });
+        return cleanup.handle((ignored, failure) -> null).thenCompose(ignored -> stale());
     }
     private boolean active(Operation operation) { return !closed && !operation.result.isDone() && owner(operation.owner.connection) == operation.owner; }
     private Managed owner(PaperSecurityConnection connection) {
@@ -327,7 +349,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
             if (shutdownResult != null) return shutdownResult.minimalCompletionStage();
             closed = true;
             result = shutdownResult = new CompletableFuture<>();
-            acknowledgements = new ArrayList<>(cleanups);
+            acknowledgements = new ArrayList<>(cleanups.values());
             // Reserve every owned cleanup before invoking observers: a reentrant/concurrent disconnect
             // must not take a later connection's terminal handler out of this shutdown's ACK set.
             for (Managed owner : List.copyOf(managed.values())) {
