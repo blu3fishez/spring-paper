@@ -108,6 +108,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
                 complete(operation, null, new IllegalStateException("Connection id already exists in the repository"));
                 return stale();
             }
+            owner.created = true;
             if (!active(operation)) return discard(owner.connection);
             schedulePending(owner);
             return evaluate(request, initial, operation);
@@ -236,16 +237,30 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
 
     private CompletionStage<Void> invalidate(PaperSecurityConnection connection, PaperSecuritySession.Status terminal,
                                              Throwable failure, Predicate<Managed> condition) {
-        Managed revoked;
-        Operation operation;
-        var cleanup = new CompletableFuture<Void>();
+        Invalidation invalidation = prepareInvalidation(connection, terminal, failure, condition);
+        return invalidation == null ? CompletableFuture.completedFuture(null) : clean(invalidation);
+    }
+
+    private Invalidation prepareInvalidation(PaperSecurityConnection connection, PaperSecuritySession.Status terminal,
+                                            Throwable failure, Predicate<Managed> condition) {
         synchronized (admissionLock) {
-            revoked = owner(connection);
-            if (!condition.test(revoked)) return CompletableFuture.completedFuture(null);
+            Managed revoked = owner(connection);
+            if (!condition.test(revoked)) return null;
             if (revoked != null) { managed.remove(connection.connectionId(), revoked); cancelPending(revoked); }
-            operation = operations.get(connection.connectionId());
+            Operation operation = operations.get(connection.connectionId());
+            var cleanup = new CompletableFuture<Void>();
             cleanups.add(cleanup);
+            return new Invalidation(connection, terminal, failure, revoked, operation, cleanup);
         }
+    }
+
+    private CompletionStage<Void> clean(Invalidation invalidation) {
+        var connection = invalidation.connection;
+        var terminal = invalidation.terminal;
+        var failure = invalidation.failure;
+        var revoked = invalidation.revoked;
+        var operation = invalidation.operation;
+        var cleanup = invalidation.cleanup;
         // 로컬 차단은 원격 삭제의 ACK와 독립적이다. 삭제 stage가 멈춰도 인증 대기 future는 종료되어야 한다.
         // 소비자 publisher/handler/저장소 호출과 future 완료를 전역 admission lock 안에서 실행하지 않는다.
         if (revoked != null) {
@@ -255,7 +270,10 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         if (operation != null && operation.owner == revoked) complete(operation, null, failure);
         CompletionStage<Void> notification = revoked == null ? CompletableFuture.completedFuture(null)
                 : notify(revoked.snapshot.finish(terminal, clock.instant()), terminal == PaperSecuritySession.Status.CLOSED ? null : failure);
-        CompletionStage<Void> removal = stage(() -> repository.invalidate(connection)).thenApply(ignored -> null);
+        // A pending create may eventually report false for somebody else's existing row. Only its
+        // positive acknowledgement grants ownership; a late successful create is removed by discard.
+        CompletionStage<Void> removal = revoked != null && !revoked.created ? CompletableFuture.completedFuture(null)
+                : stage(() -> repository.invalidate(connection)).thenApply(ignored -> null);
         CompletableFuture.allOf(notification.toCompletableFuture(), removal.toCompletableFuture()).whenComplete((ignored, cleanupFailure) -> {
             if (cleanupFailure == null) cleanup.complete(null);
             else { suppress(failure, unwrap(cleanupFailure)); cleanup.completeExceptionally(unwrap(cleanupFailure)); }
@@ -303,18 +321,25 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     }
     public CompletionStage<Void> shutdown() {
         CompletableFuture<Void> result;
-        List<PaperSecurityConnection> connections;
+        List<Invalidation> invalidations = new ArrayList<>();
         List<CompletableFuture<Void>> acknowledgements;
         synchronized (admissionLock) {
             if (shutdownResult != null) return shutdownResult.minimalCompletionStage();
             closed = true;
             result = shutdownResult = new CompletableFuture<>();
-            connections = managed.values().stream().map(owner -> owner.connection).toList();
             acknowledgements = new ArrayList<>(cleanups);
+            // Reserve every owned cleanup before invoking observers: a reentrant/concurrent disconnect
+            // must not take a later connection's terminal handler out of this shutdown's ACK set.
+            for (Managed owner : List.copyOf(managed.values())) {
+                var invalidation = prepareInvalidation(owner.connection, PaperSecuritySession.Status.CLOSED,
+                        new CancellationException("Connection disconnected"), candidate -> candidate == owner);
+                if (invalidation != null) {
+                    invalidations.add(invalidation);
+                    acknowledgements.add(invalidation.cleanup);
+                }
+            }
         }
-        // A synchronous failed cleanup has already left the in-flight ledger. Retain each shutdown
-        // call's acknowledgement directly so remote deletion/terminal-handler failure cannot disappear.
-        connections.forEach(connection -> acknowledgements.add(disconnect(connection).toCompletableFuture()));
+        invalidations.forEach(this::clean);
         CompletableFuture.allOf(acknowledgements.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
             if (failure == null) result.complete(null); else result.completeExceptionally(unwrap(failure));
         });
@@ -358,9 +383,12 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     private static final class Managed {
         final PaperSecurityConnection connection;
         volatile PaperSecuritySession snapshot; // Pending/last acknowledged metadata for revocation notices, never an authority source.
+        volatile boolean created;
         volatile ScheduledFuture<?> pendingTimer;
         Managed(PaperSecuritySession snapshot) { this.connection = snapshot.connection(); this.snapshot = snapshot; }
     }
+    private record Invalidation(PaperSecurityConnection connection, PaperSecuritySession.Status terminal,
+                                Throwable failure, Managed revoked, Operation operation, CompletableFuture<Void> cleanup) {}
     @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
     private static final class Operation {
         final Managed owner;

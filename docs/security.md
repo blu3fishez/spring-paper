@@ -89,6 +89,7 @@ AUTHENTICATED 결정은 저장소 CAS 확인 뒤 공개한다. 결과 handler는
 PaperSecuritySessionRepository의 각 메서드는 호출 스레드에서 즉시 stage를 반환해야 한다. DB/네트워크 작업은 저장소 어댑터의 worker에서 수행한다. 필터·대기/결과 처리기도 같은 비동기 계약을 따른다.
 
 - create는 새 connectionId만 생성하고 이미 있으면 false다. 실패한 생성으로 다른 컨텍스트의 기존 row를 지우지 않는다.
+- create=true 응답을 확인하기 전의 철회는 미확정 row를 임의로 삭제하지 않는다. 뒤늦게 true가 오면 기존 철회 상태를 유지하며 해당 row를 정리하고, false면 기존 row를 보존한다.
 - compareAndSet은 전체 접속 식별자와 revision을 함께 검사하고 revision을 정확히 하나 증가시킨다. 만료된 expected는 실제 저장 시점에 거절한다.
 - remove는 expected revision만, invalidate는 이 정확한 접속의 모든 revision을 제거한다. playerId만으로 다른 접속을 삭제하지 않는다.
 - Redis 등을 구현한다면 서버 측 TTL/원자적 조건 검사까지 포함한다. 미리 읽은 시각만 검사하면 지연된 저장 요청이 만료 이후 인증을 복원할 수 있다.
@@ -96,6 +97,13 @@ PaperSecuritySessionRepository의 각 메서드는 호출 스레드에서 즉시
 - 같은 접속의 동시 인증 작업은 거절하며, 재시도로 최초 pending deadline을 늘리지 않는다.
 
 저장소 삭제가 멈추거나 실패해도 로컬 인증은 먼저 무효화하고 대기 중인 작업을 종료한다. PaperSecurityConnectionInvalidatedEvent는 이 로컬 철회를 뜻한다. PaperSecuritySessionChangedEvent의 terminal 상태도 원격 삭제 성공을 뜻하지 않는다. 삭제와 handler 완료는 disconnect/shutdown의 stage로 확인한다. 네트워크 장애·프로세스 강제 종료에 대비한 TTL/내구성 정책은 저장소 어댑터가 소유한다.
+
+종료는 새 요청 차단과 모든 소유 연결의 로컬 철회·정리 ACK 예약을 한 admission 경계에서 끝낸 뒤,
+관찰 이벤트·handler·저장소를 락 밖에서 호출한다. 관찰자의 재진입이나 동시 disconnect로 다른 연결의
+handler ACK가 종료 결과에서 빠지지 않는다. 한 handler가 실패해도 나머지 연결과 저장소 삭제는 시도한다.
+아직 응답하지 않은 create I/O 자체의 강제 완료·롤백은 disconnect/shutdown이 보장하지 않는다.
+create가 실제로 커밋했지만 실패로 응답한 경우도 소유권이 확정되지 않으므로 다른 row를 삭제하여 복구하지 않는다.
+이 불확정 커밋과 응답 없이 끝난 프로세스의 잔여 row는 저장소의 TTL·멱등성·조정 정책으로 처리한다.
 
 비동기 구간의 Authentication은 값으로 전달한다. SecurityContextHolder를 세션 저장소로 쓰거나 전역/상속 ThreadLocal로 변경하지 않는다. 필터·Provider·저장소/처리기 호출에는 소유 컨텍스트의 TCCL을 적용하고 원래 로더를 복원한다.
 

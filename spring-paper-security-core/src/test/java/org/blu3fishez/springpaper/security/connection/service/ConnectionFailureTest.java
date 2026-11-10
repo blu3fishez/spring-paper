@@ -115,6 +115,71 @@ class ConnectionFailureTest {
         }
         assertEquals(existing, repository.storage.find(connection).toCompletableFuture().join().orElseThrow());
     }
+    @Test void disconnectBeforeRejectedCreateAcknowledgementNeverDeletesAnotherContextsRecord() {
+        rejectedCreateSurvivesRevocation(Revocation.DISCONNECT);
+    }
+    @Test void shutdownBeforeRejectedCreateAcknowledgementNeverDeletesAnotherContextsRecord() {
+        rejectedCreateSurvivesRevocation(Revocation.SHUTDOWN);
+    }
+    @Test void timeoutBeforeRejectedCreateAcknowledgementNeverDeletesAnotherContextsRecord() {
+        rejectedCreateSurvivesRevocation(Revocation.TIMEOUT);
+    }
+    private enum Revocation { DISCONNECT, SHUTDOWN, TIMEOUT }
+    private static void rejectedCreateSurvivesRevocation(Revocation revocation) {
+        var time = new ManualSecurityTime();
+        var repository = new Repository(time);
+        var connection = connection();
+        var existing = PaperSecuritySession.pending(connection, time.instant().plusSeconds(100));
+        assertTrue(repository.storage.create(existing).toCompletableFuture().join());
+        repository.createGate = new CompletableFuture<>();
+        try (var security = service(repository, time, (exchange, next) -> CompletableFuture.completedFuture(allowed()),
+                (session, failure) -> CompletableFuture.completedFuture(null), event -> {})) {
+            var opened = security.open(request(connection)).toCompletableFuture();
+            switch (revocation) {
+                case DISCONNECT -> security.disconnect(connection).toCompletableFuture().join();
+                case SHUTDOWN -> security.shutdown().toCompletableFuture().join();
+                case TIMEOUT -> time.advance(Duration.ofSeconds(5));
+            }
+            repository.createGate.complete(false);
+
+            assertTrue(opened.isCompletedExceptionally());
+            assertEquals(existing, repository.storage.find(connection).toCompletableFuture().join().orElseThrow());
+        }
+        assertEquals(existing, repository.storage.find(connection).toCompletableFuture().join().orElseThrow());
+    }
+    @Test void createCommittedBeforeItsPositiveAcknowledgementIsStillRemovedAfterConcurrentDisconnect() {
+        var time = new ManualSecurityTime();
+        var service = new java.util.concurrent.atomic.AtomicReference<PaperConnectionSecurityService>();
+        var acknowledgement = new CompletableFuture<Boolean>();
+        var disconnectedBeforeAcknowledgement = new java.util.concurrent.atomic.AtomicBoolean();
+        var repository = new Repository(time) {
+            @Override public CompletionStage<Boolean> create(PaperSecuritySession session) {
+                initial = session;
+                return acknowledgement.thenApply(created -> {
+                    service.get().disconnect(session.connection()).toCompletableFuture().join();
+                    assertTrue(storage.find(session.connection()).toCompletableFuture().join().isPresent(),
+                            "the service has not yet observed ownership of the committed row");
+                    disconnectedBeforeAcknowledgement.set(true);
+                    return created;
+                });
+            }
+        };
+        var events = new ArrayList<Object>();
+        try (var security = service(repository, time, (exchange, next) -> CompletableFuture.completedFuture(allowed()),
+                (session, failure) -> CompletableFuture.completedFuture(null), events::add)) {
+            service.set(security);
+            var connection = connection();
+            var opened = security.open(request(connection)).toCompletableFuture();
+            assertTrue(repository.storage.create(repository.initial).toCompletableFuture().join());
+            acknowledgement.complete(true);
+
+            assertTrue(disconnectedBeforeAcknowledgement.get());
+            assertTrue(opened.isCompletedExceptionally());
+            assertTrue(repository.storage.find(connection).toCompletableFuture().join().isEmpty());
+            assertTrue(events.stream().noneMatch(event -> event instanceof PaperSecuritySessionChangedEvent changed
+                    && changed.session().status() == PaperSecuritySession.Status.AUTHENTICATED));
+        }
+    }
     @Test void aBrokenObserverDoesNotPreventFailClosedCleanupOrCauseSelfSuppression() {
         var time = new ManualSecurityTime();
         var repository = new Repository(time);
