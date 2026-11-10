@@ -25,6 +25,8 @@ import org.springframework.beans.factory.BeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.blu3fishez.springpaper.task.PaperExecutionConfiguration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Fallback;
 import org.springframework.scheduling.TaskScheduler;
@@ -34,8 +36,10 @@ import org.springframework.scheduling.config.TaskSchedulerRouter;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 
 @Configuration(proxyBeanMethods = false)
+@Import(PaperExecutionConfiguration.class)
 public class PaperCoreConfiguration {
     public static final String WORKERS_BEAN_NAME = "paperTasks";
+    public static final String WORKER_EXECUTOR_BEAN_NAME = "paperWorkerExecutor";
     public static final String DEFAULT_SCHEDULER_BEAN_NAME = "paperDefaultTaskScheduler";
     private final JavaPlugin plugin;
     private final Server server;
@@ -98,9 +102,6 @@ public class PaperCoreConfiguration {
     @Bean public static PaperBeanCatalog paperBeanCatalog() { return new PaperBeanCatalog(); }
     @Bean public static PropertySourcesPlaceholderConfigurer paperPlaceholders() {
         return new PropertySourcesPlaceholderConfigurer();
-    }
-    @Bean(WORKERS_BEAN_NAME) public PaperTasks paperTasks(JavaPlugin plugin, PaperConfiguration configuration) {
-        return new PaperTasks(plugin, configuration);
     }
     // Explicit scheduler selection keeps an unqualified @Scheduled/TaskScheduler on background work.
     @Bean(name = PaperMainThreadTaskScheduler.BEAN_NAME, defaultCandidate = false, destroyMethod = "")

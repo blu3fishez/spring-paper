@@ -1,4 +1,5 @@
 dependencies {
     api 'org.yaml:snakeyaml:2.6'
     api 'org.springframework:spring-core'
+    api 'org.springframework:spring-beans'
 }

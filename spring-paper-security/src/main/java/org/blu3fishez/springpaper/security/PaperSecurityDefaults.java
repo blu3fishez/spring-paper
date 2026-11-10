@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
+import org.blu3fishez.springpaper.config.internal.DefaultBeans;
 import org.blu3fishez.springpaper.security.api.PaperSecurityConnections;
 import org.blu3fishez.springpaper.security.listener.PaperConnectionSecurityListener;
 import org.blu3fishez.springpaper.security.connection.service.PaperConnectionSecurityService;
@@ -33,7 +34,7 @@ public class PaperSecurityDefaults {
                     () -> connectionMode ? new PaperSessionAuthenticationResolver(beans.getBean(PaperSecurityConnections.class), beans.getBean(Clock.class),
                             () -> beans.getBean(PaperConnectionSecurityService.class))
                             : new PaperPlatformAuthenticationResolver());
-            if (beans.getBeanNamesForType(PaperSecurityInterceptor.class, false, false).length == 0) {
+            if (DefaultBeans.candidates(beans, PaperSecurityInterceptor.class).isEmpty()) {
                 var definition = new RootBeanDefinition(PaperSecurityInterceptor.class);
                 definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_CONSTRUCTOR);
                 registry.registerBeanDefinition("paperSecurityInterceptor", definition);
@@ -42,7 +43,7 @@ public class PaperSecurityDefaults {
                 fallback(beans, registry, PaperConnectionAuthenticationConverter.class, "paperConnectionAuthenticationConverter", () -> event -> null);
                 fallback(beans, registry, PaperConnectionAdmissionHandler.class, "paperConnectionAdmissionHandler",
                         () -> new DefaultPaperConnectionAdmissionHandler(config.text("spring.paper.security.denied-message", "Authentication is required or unavailable.")));
-                if (beans.getBeanNamesForType(PaperConnectionSecurityListener.class, false, false).length == 0) {
+                if (DefaultBeans.candidates(beans, PaperConnectionSecurityListener.class).isEmpty()) {
                     var definition = new RootBeanDefinition(PaperConnectionSecurityListener.class);
                     definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_CONSTRUCTOR);
                     registry.registerBeanDefinition("paperConnectionSecurityListener", definition);
@@ -52,6 +53,6 @@ public class PaperSecurityDefaults {
     }
     private static <T> void fallback(ConfigurableListableBeanFactory beans, BeanDefinitionRegistry registry,
                                     Class<T> type, String name, Supplier<T> factory) {
-        if (beans.getBeanNamesForType(type, false, false).length == 0) registry.registerBeanDefinition(name, new RootBeanDefinition(type, factory));
+        if (DefaultBeans.candidates(beans, type).isEmpty()) registry.registerBeanDefinition(name, new RootBeanDefinition(type, factory));
     }
 }

@@ -75,6 +75,40 @@ class ExistingJpaInfrastructureTest {
         }
     }
 
+    record DefaultTransactions(PlatformTransactionManager manager) {}
+    @Configuration(proxyBeanMethods = false)
+    static class QualifiedTransactions {
+        @Bean(defaultCandidate = false) PlatformTransactionManager reportingTransactions(EntityManagerFactory entities) {
+            return new JpaTransactionManager(entities);
+        }
+        @Bean DefaultTransactions ordinaryConsumer(PlatformTransactionManager manager) { return new DefaultTransactions(manager); }
+    }
+    @Test void qualifierOnlyTransactionManagerDoesNotReplaceTheGeneralManager() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(PaperConfiguration.class, () -> new PaperConfiguration(context.getEnvironment()));
+            context.register(ApplicationPersistence.class, QualifiedTransactions.class, JpaConfiguration.class);
+            context.refresh();
+            assertNotSame(context.getBean("reportingTransactions"), context.getBean(DefaultTransactions.class).manager());
+            verifyCommitAndRollback(context);
+        }
+    }
+    @Test void primaryDataSourceWinsWithoutSelectingTheQualifiedOrOtherSource() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.getEnvironment().getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource("jpa", Map.of(
+                    "spring.paper.jpa.entities", java.util.List.of(StoredNote.class.getPackageName()),
+                    "spring.paper.jpa.properties.hibernate.hbm2ddl.auto", "create-drop")));
+            context.registerBean(PaperConfiguration.class, () -> new PaperConfiguration(context.getEnvironment()));
+            var primary = new JdbcDataSource(); primary.setURL("jdbc:h2:mem:" + UUID.randomUUID());
+            context.registerBean("primaryDatabase", DataSource.class, () -> primary, definition -> definition.setPrimary(true));
+            context.registerBean("otherDatabase", DataSource.class, JdbcDataSource::new);
+            context.register(JpaConfiguration.class);
+            context.refresh();
+            var manager = context.getBean(PlatformTransactionManager.class);
+            assertSame(primary, ((JpaTransactionManager) manager).getDataSource());
+            assertFalse(context.containsBeanDefinition("springPaperDataSource"));
+        }
+    }
+
     private AnnotationConfigApplicationContext context(boolean suppliedManager, boolean unrelatedSources) {
         var context = new AnnotationConfigApplicationContext();
         context.setAllowBeanDefinitionOverriding(false);

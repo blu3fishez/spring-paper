@@ -1,11 +1,12 @@
 package org.blu3fishez.springpaper.jdbc;
 
 import javax.sql.DataSource;
+import org.blu3fishez.springpaper.config.internal.DefaultBeans;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
-import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Fallback;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
@@ -17,23 +18,23 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @Configuration(proxyBeanMethods = false)
 @EnableTransactionManagement
 public class JdbcConfiguration {
+    @Bean @Lazy @Fallback
+    public JdbcTemplate paperJdbcTemplate(DataSource source) { return new JdbcTemplate(source); }
+    @Bean @Lazy @Fallback
+    public NamedParameterJdbcTemplate paperNamedJdbcTemplate(JdbcOperations operations) {
+        return new NamedParameterJdbcTemplate(operations);
+    }
+    @Bean @Lazy @Fallback
+    public JdbcClient paperJdbcClient(NamedParameterJdbcOperations operations) { return JdbcClient.create(operations); }
+
     @Bean public static BeanFactoryPostProcessor springPaperJdbcInfrastructure() {
         return factory -> {
-            var registry = (BeanDefinitionRegistry) factory;
-            if (factory.getBeanNamesForType(JdbcOperations.class, false, false).length == 0) {
-                registry.registerBeanDefinition("jdbcTemplate", new RootBeanDefinition(JdbcTemplate.class,
-                        () -> new JdbcTemplate(factory.getBean(DataSource.class))));
-            }
-            if (factory.getBeanNamesForType(NamedParameterJdbcOperations.class, false, false).length == 0) {
-                registry.registerBeanDefinition("namedParameterJdbcTemplate", new RootBeanDefinition(NamedParameterJdbcTemplate.class,
-                        () -> new NamedParameterJdbcTemplate(factory.getBean(JdbcOperations.class))));
-            }
-            if (factory.getBeanNamesForType(JdbcClient.class, false, false).length == 0) {
-                registry.registerBeanDefinition("jdbcClient", new RootBeanDefinition(JdbcClient.class,
-                        () -> JdbcClient.create(factory.getBean(NamedParameterJdbcOperations.class))));
-            }
-            // A JDBC default manager created first would steal JPA's transaction ownership. The application
-            // selects its standard manager; enabling both modules never creates another transaction owner.
+            // A qualifier-only reporting adapter is not a default. Reproduced with the unqualified
+            // consumer injection failing despite a valid DataSource. Use the actual Spring resolver.
+            DefaultBeans.backOff(factory, JdbcOperations.class, "paperJdbcTemplate", "jdbcTemplate");
+            DefaultBeans.backOff(factory, NamedParameterJdbcOperations.class, "paperNamedJdbcTemplate", "namedParameterJdbcTemplate");
+            DefaultBeans.backOff(factory, JdbcClient.class, "paperJdbcClient", "jdbcClient");
+            // A JDBC default manager could steal JPA transaction ownership. The consumer selects it.
         };
     }
 }
