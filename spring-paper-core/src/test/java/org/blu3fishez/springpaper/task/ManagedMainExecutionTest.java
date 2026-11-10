@@ -169,6 +169,20 @@ class ManagedMainExecutionTest {
             assertEquals("still active", pending.join());
         }
     }
+    @Test void aDisabledHostAllowsInlineCleanupOnlyWithinExplicitMainQuiesce() {
+        var host = new Host();
+        when(host.server.isPrimaryThread()).thenReturn(true);
+        when(host.plugin.isEnabled()).thenReturn(false);
+        var tasks = host.tasks();
+        var mutations = new AtomicInteger();
+        assertTrue(tasks.main(mutations::incrementAndGet).isCompletedExceptionally());
+        tasks.quiesceMainThread();
+        tasks.main(mutations::incrementAndGet).join();
+        assertTrue(tasks.nextTick(mutations::incrementAndGet).isCompletedExceptionally());
+        tasks.close();
+        assertTrue(tasks.main(mutations::incrementAndGet).isCompletedExceptionally());
+        assertEquals(1, mutations.get());
+    }
     private static class Host {
         final JavaPlugin plugin = mock(JavaPlugin.class);
         final Server server = mock(Server.class);

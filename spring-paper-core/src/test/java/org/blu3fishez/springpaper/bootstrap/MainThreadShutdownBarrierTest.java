@@ -115,10 +115,13 @@ class MainThreadShutdownBarrierTest {
     }
 
     @Test void settlesQueuedMainBeforeAUserFlushAndKeepsFinalDbAdmissionOpen() throws Exception {
-        var app = SpringPaperApplication.run(host(Host.class));
+        Host plugin = host(Host.class);
+        var app = SpringPaperApplication.run(plugin);
         FlushOwner owner = lastOwner;
         owner.begin(false);
         Runnable stale = nextMain();
+        // Paper JavaPlugin.setEnabled(false) clears this flag before invoking onDisable.
+        when(plugin.isEnabled()).thenReturn(false);
         app.close();
         assertTrue(owner.flushFinished);
         assertTrue(owner.destroyedAfterFlush);

@@ -95,6 +95,8 @@ Bootstrap이 `PaperTasks.quiesceMainThread()`를 Paper main에서 자동 호출�
 받는다. 최종 `close()`가 모든 main 실행을 거절하고 worker를 drain한다. 단독 호스트가 bootstrap을
 대신할 때만 같은 barrier→최종 저장→close 순서를 소유하며, off-main barrier 호출은 거절한다.
 이 순서는 부분 startup 실패의 정리에도 같다. 종료 중 업무 callback을 대신 실행하지 않는다.
+Paper는 enabled를 false로 바꾼 뒤 `onDisable()`을 호출하므로, barrier 안의 명시적인 inline 정리는
+그 flag와 무관하게 허용한다. 일반 disabled 상태나 최종 close 뒤의 실행을 허용하는 계약은 아니다.
 
 Spring `ContextClosedEvent`는 worker drain 뒤 실제 context 파괴 단계에 남긴다. 이 event를 미리
 발행하면 일반 Spring executor가 새 작업을 거절하여 최종 DB flush가 제출되지 않을 수 있다.

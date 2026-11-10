@@ -56,7 +56,9 @@ final class PaperMainThreadDispatcher implements AutoCloseable {
         if (closed || quiesced && !inline) { call.reject(); return; }
         Runnable guarded = () -> {
             if (call.result.isDone()) return;
-            if (closed || quiesced && !inline || !plugin.isEnabled()) { call.reject(); return; }
+            // Paper clears enabled before onDisable; an explicit main-thread barrier still owns
+            // inline cleanup until final close. A normally disabled host has no such authorization.
+            if (closed || (quiesced ? !inline : !plugin.isEnabled())) { call.reject(); return; }
             call.started = true;
             Thread thread = Thread.currentThread();
             ClassLoader previous = thread.getContextClassLoader();

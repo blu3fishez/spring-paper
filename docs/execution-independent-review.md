@@ -101,5 +101,12 @@ event를 조기 발행하면 consumer executor가 최종 DB 제출을 거절할 
 큐를 잇는 최종 저장이 timeout됐고, 부분 startup 정리도 실패했으며, 미완료 source의 UI 결과가
 종료 훅에 열린 채 도착했다. 수정 후 세 경로와 이미 수락한 DB commit·뒤따르는 저장·자원 파괴,
 stale native callback 차단·source 비취소·inline main 정리를 확인했다. off-main 거절과 재진입 중인
-main 정리도 별도 검증했다. Java 25에서 `:spring-paper-core:test verifySourceSize --max-workers=2`가
-통과했으며 core 테스트 114개는 실패·오류·skip이 없다. 실제 게임 서버나 네트워크 검증은 추가하지 않았다.
+main 정리도 별도 검증했다. raw Executor의 별도 caller-owned promise는 이 barrier도 알 수 없으므로
+완료를 기다리는 소비자는 관리형 Future 자체를 사용해야 한다.
+
+정확한 Paper 26.3 API source JAR의 `JavaPlugin.setEnabled`도 확인했다. Paper는 enabled=false를
+기록한 뒤 `onDisable`을 호출한다. 실제 그 flag로 전환하는 bootstrap 회귀와 일반 disabled/명시적
+quiesce/최종 close를 구분하는 회귀를 먼저 실행해 inline cleanup 거절을 재현했다. quiesce 안에서
+main이 직접 실행하는 정리만 허용하도록 고쳐, 일반 disabled와 모든 deferred 실행의 거절은 유지했다.
+Java 25에서 `:spring-paper-core:build verifySourceSize --max-workers=2`가 통과했으며 core 테스트
+115개는 실패·오류·skip이 없다. 실제 게임 서버나 네트워크 검증은 추가하지 않았다.
