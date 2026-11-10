@@ -127,4 +127,38 @@ class ConnectionFailureTest {
             assertTrue(repository.storage.find(connection).toCompletableFuture().join().isEmpty());
         }
     }
+    @Test void shutdownRetainsAnImmediatelyFailedRepositoryDeletion() {
+        var time = new ManualSecurityTime();
+        var repository = new Repository(time);
+        var security = service(repository, time, (exchange, next) -> CompletableFuture.completedFuture(allowed()),
+                (session, failure) -> CompletableFuture.completedFuture(null), event -> {});
+        var connection = connection();
+        var authenticated = security.open(request(connection)).toCompletableFuture().join();
+        var broken = new IllegalStateException("repository unavailable during shutdown");
+        repository.deleteGate = CompletableFuture.failedFuture(broken);
+
+        var failure = assertThrows(java.util.concurrent.CompletionException.class,
+                () -> security.shutdown().toCompletableFuture().join());
+        assertSame(broken, failure.getCause());
+        assertFalse(security.current(authenticated), "remote cleanup failure must not undo local revocation");
+        assertTrue(repository.storage.find(connection).toCompletableFuture().join().isPresent());
+        assertThrows(IllegalStateException.class, security::close);
+    }
+    @Test void shutdownRetainsAnImmediatelyFailedTerminalHandler() {
+        var time = new ManualSecurityTime();
+        var repository = new Repository(time);
+        var broken = new IllegalStateException("terminal transport handler failed");
+        var security = service(repository, time, (exchange, next) -> CompletableFuture.completedFuture(allowed()),
+                (session, failure) -> session.status() == PaperSecuritySession.Status.CLOSED
+                        ? CompletableFuture.failedFuture(broken) : CompletableFuture.completedFuture(null), event -> {});
+        var connection = connection();
+        security.open(request(connection)).toCompletableFuture().join();
+
+        var failure = assertThrows(java.util.concurrent.CompletionException.class,
+                () -> security.shutdown().toCompletableFuture().join());
+        assertSame(broken, failure.getCause());
+        assertTrue(repository.storage.find(connection).toCompletableFuture().join().isEmpty(),
+                "a failed notification must still attempt repository cleanup");
+        assertThrows(IllegalStateException.class, security::close);
+    }
 }

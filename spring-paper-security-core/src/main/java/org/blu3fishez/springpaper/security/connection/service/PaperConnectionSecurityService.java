@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -258,7 +259,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         CompletableFuture.allOf(notification.toCompletableFuture(), removal.toCompletableFuture()).whenComplete((ignored, cleanupFailure) -> {
             if (cleanupFailure == null) cleanup.complete(null);
             else { suppress(failure, unwrap(cleanupFailure)); cleanup.completeExceptionally(unwrap(cleanupFailure)); }
-            cleanups.remove(cleanup);
+            synchronized (admissionLock) { cleanups.remove(cleanup); }
         });
         return cleanup.minimalCompletionStage();
     }
@@ -303,14 +304,18 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     public CompletionStage<Void> shutdown() {
         CompletableFuture<Void> result;
         List<PaperSecurityConnection> connections;
+        List<CompletableFuture<Void>> acknowledgements;
         synchronized (admissionLock) {
             if (shutdownResult != null) return shutdownResult.minimalCompletionStage();
             closed = true;
             result = shutdownResult = new CompletableFuture<>();
             connections = managed.values().stream().map(owner -> owner.connection).toList();
+            acknowledgements = new ArrayList<>(cleanups);
         }
-        connections.forEach(this::disconnect);
-        CompletableFuture.allOf(cleanups.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+        // A synchronous failed cleanup has already left the in-flight ledger. Retain each shutdown
+        // call's acknowledgement directly so remote deletion/terminal-handler failure cannot disappear.
+        connections.forEach(connection -> acknowledgements.add(disconnect(connection).toCompletableFuture()));
+        CompletableFuture.allOf(acknowledgements.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
             if (failure == null) result.complete(null); else result.completeExceptionally(unwrap(failure));
         });
         return result.minimalCompletionStage();

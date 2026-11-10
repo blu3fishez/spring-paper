@@ -53,4 +53,17 @@ class CommandRegistrationTest {
         registrar.close();
         assertSame(other, command.getExecutor());
     }
+    @Test void registrationAfterCloseCannotAcquireACommandBinding() throws Exception {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        PluginCommand command = command(plugin);
+        CommandExecutor previous = command.getExecutor();
+        when(plugin.getCommand("guide")).thenReturn(command);
+        var registrar = new PaperCommandRegistrar(plugin, new PaperInvocationService(List.of()));
+        registrar.close();
+        assertThrows(IllegalStateException.class, () -> registrar.register("guide", new Guide(),
+                Guide.class.getAnnotation(PaperCommandExecutor.class)));
+        assertSame(previous, command.getExecutor());
+        assertNull(command.getTabCompleter());
+        verify(plugin, never()).getCommand(anyString());
+    }
 }

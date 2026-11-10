@@ -25,7 +25,8 @@ public abstract class GeneratePluginDescriptor extends DefaultTask {
     @Input public abstract Property<String> getPluginVersion();
     @OutputDirectory public abstract DirectoryProperty getOutputDirectory();
 
-    @TaskAction public void generate() throws IOException {
+    /** Only values written to the public descriptor participate, never the whole process environment. */
+    @Input public Map<String, Object> getResolvedDescriptor() throws IOException {
         PluginMetadataReader reader = new PluginMetadataReader();
         for (var file : getClasses()) reader.read(file.toPath(), true);
         for (var file : getLibraries()) reader.read(file.toPath(), false);
@@ -70,6 +71,10 @@ public abstract class GeneratePluginDescriptor extends DefaultTask {
         PluginPermissions.merge(metadata.getOrDefault("permissions", List.of()), permissions);
         if (!commands.isEmpty()) output.put("commands", commands);
         if (!permissions.isEmpty()) output.put("permissions", permissions);
+        return output;
+    }
+    @TaskAction public void generate() throws IOException {
+        Map<String, Object> output = getResolvedDescriptor();
         DumperOptions options = new DumperOptions();
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         var directory = getOutputDirectory().get().getAsFile().toPath();

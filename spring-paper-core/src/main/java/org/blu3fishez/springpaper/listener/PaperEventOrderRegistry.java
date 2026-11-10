@@ -14,7 +14,11 @@ public final class PaperEventOrderRegistry {
     private final Map<EventPriority, List<Selector>> prefixes = new EnumMap<>(EventPriority.class);
     private final List<Rule> rules = new ArrayList<>();
 
-    /** Append ordered listener groups before all remaining handlers, separately for each native event list. */
+    /**
+     * Append ordered listener groups before all remaining handlers, separately for each native event list.
+     * A listener subinterface selects all its implementations without ordering members of that group.
+     * Repeated calls append to the same prefix; independent features should contribute scoped before rules.
+     */
     @SafeVarargs
     public final void first(EventPriority priority, Class<? extends Listener>... types) {
         for (var type : types) prefix(priority).add(new Type(Objects.requireNonNull(type)));

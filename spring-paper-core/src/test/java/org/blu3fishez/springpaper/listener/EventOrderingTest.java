@@ -81,6 +81,16 @@ class EventOrderingTest {
         Named(List<String> calls, String label) { this.calls = calls; this.label = label; }
         @EventHandler(priority = EventPriority.HIGHEST) public void damage(Damage event) { calls.add(label); }
     }
+    public interface Guard extends Listener {}
+    public static class Guarded extends Named implements Guard {
+        Guarded(List<String> calls, String label) { super(calls, label); }
+    }
+    public static class InheritedGuard extends Guarded {
+        InheritedGuard(List<String> calls, String label) { super(calls, label); }
+    }
+    public static class OtherGuard extends Named implements Guard {
+        OtherGuard(List<String> calls, String label) { super(calls, label); }
+    }
     public static class SeparateListA implements Listener {
         @PaperEventOrder(after = SeparateListB.class)
         @EventHandler public void damage(Damage event) {}
@@ -242,6 +252,26 @@ class EventOrderingTest {
                     new PaperListenerRegistrar.Candidate("first", new Named(calls, "first"), Named.class)), List.of(), order);
             for (var callback : host.callbacks) callback.execute(null, new Damage());
             assertEquals(List.of("first", "last"), calls);
+        }
+    }
+
+    @Test void aPublicMarkerGroupsImplementationsBeforeLaterStagesWithoutOrderingItsMembers() throws Exception {
+        for (boolean reverse : List.of(false, true)) {
+            var host = new Host(); var calls = new ArrayList<String>();
+            var order = new PaperEventOrderRegistry();
+            order.first(EventPriority.HIGHEST, Guard.class, ConfiguredCounter.class);
+            var candidates = new ArrayList<>(List.of(
+                    new PaperListenerRegistrar.Candidate("other", new Named(calls, "other"), Named.class),
+                    new PaperListenerRegistrar.Candidate("guardB", new InheritedGuard(calls, "guardB"), InheritedGuard.class),
+                    new PaperListenerRegistrar.Candidate("migration", new ConfiguredCounter(calls), ConfiguredCounter.class),
+                    new PaperListenerRegistrar.Candidate("guardA", new OtherGuard(calls, "guardA"), OtherGuard.class)));
+            if (reverse) java.util.Collections.reverse(candidates);
+            try (var registrar = host.registrar()) {
+                registrar.registerAll(candidates, List.of(), order);
+                for (var callback : host.callbacks) callback.execute(null, new ChildDamage());
+                assertEquals(reverse ? List.of("guardA", "guardB", "counter", "other")
+                        : List.of("guardB", "guardA", "counter", "other"), calls);
+            }
         }
     }
 

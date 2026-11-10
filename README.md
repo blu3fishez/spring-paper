@@ -15,6 +15,7 @@ Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다
 복사해서 쓸 작은 업무는 [business-plugin](examples/business-plugin/README.md)을 먼저 본다.
 [전후 비교·검증](docs/usability-contracts.md), [실행 완료/취소](docs/execution-contracts.md), [기본/전용 빈](docs/default-beans.md),
 [선택 기능](docs/optional-features.md)의 지원 계약을 사용한다.
+모듈별 책임·확장 경계와 이번 재현 결과는 [책임·사용성 점검](docs/architecture-audit.md)에 정리했다.
 
 ## 진입점
 
@@ -88,6 +89,12 @@ public final class GuideCommand implements CommandExecutor, TabCompleter {
 `firstBean`·`beforeBean`·`beforeBeans`는 소유 객체가 노출한 factory adapter의 Spring 빈 이름을 사용한다.
 `before(event, priority, beforeType, afterTypes...)`로 나머지 관계를 선언한다. 활성 입력의 실제 메타데이터를
 코어가 해석하며 기존 관계·어노테이션과 같은 그래프에서 순환을 검증한다.
+
+공개 `Listener` 하위 인터페이스도 그룹 선택자로 쓸 수 있다. 구성은 실제로 공유하는 입력 단계의
+계약만 참조하고, 각 기능이 구현한 리스너 목록을 중앙에 나열하지 않아도 된다. 같은 그룹 안에는
+추가 순서를 만들지 않는다. `first`를 여러 번 호출하면 하나의 prefix에 이어 붙이므로 공유 prefix는
+그 파이프라인의 구성 한 곳이 소유한다. 독립 기능의 관계는 기능별 Configuration의 configurer에서
+`before`로 제공한다. 여러 configurer의 관계도 같은 native 목록·우선순위 그래프로 검증한다.
 
 이벤트는 Bukkit `@EventHandler` 우선순위·ignoreCancelled와 원래 호출 스레드를 유지한다. 핸들러는 public void 단일 Event 인자 메서드다. 프록시가 숨긴 핸들러를 원본 객체로 우회 호출하지 않는다. AOP는 위임 서비스에 두거나 프록시에서 호출 가능한 인터페이스를 제공한다.
 

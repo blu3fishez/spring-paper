@@ -30,6 +30,7 @@ public final class PaperCommandRegistrar implements AutoCloseable {
     }
 
     public void register(String beanName, Object bean, PaperCommandExecutor metadata) {
+        if (closed) throw new IllegalStateException("Paper command registrar is closed");
         if (!(bean instanceof CommandExecutor executor)) throw new IllegalArgumentException(beanName + " must implement CommandExecutor");
         if (metadata.commands().length == 0) throw new IllegalArgumentException(beanName + ": commands must not be empty");
         for (String declared : metadata.commands()) {
