@@ -9,8 +9,8 @@ import javax.sql.DataSource;
 import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.blu3fishez.springpaper.config.internal.DefaultBeans;
 import org.blu3fishez.springpaper.spi.PaperThreadAccess;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
-import org.springframework.beans.factory.config.RuntimeBeanReference;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.Bean;
@@ -33,13 +33,19 @@ public class JpaConfiguration {
             // FactoryBean 제품의 singleton 여부는 초기화 전 확정되지 않을 수 있다. singleton으로
             // 조회를 제한하면 표준 LocalContainerEntityManagerFactoryBean 선언도 누락되므로,
             // 조기 생성 없이 Spring이 예측한 제품 타입으로 소비자 정의를 먼저 찾는다.
-            String[] factories = DefaultBeans.candidates(factory, EntityManagerFactory.class).toArray(String[]::new);
-            if (factories.length == 0 && !registry.containsBeanDefinition("entityManagerFactory")) {
+            String entitiesName = select(factory, properties, "spring.paper.jpa.entity-manager-factory-bean", EntityManagerFactory.class);
+            String managerName = select(factory, properties, "spring.paper.jpa.transaction-manager-bean", PlatformTransactionManager.class);
+            // A configured name is explicit selection, including qualifier-only resources and aliases.
+            // Validate both choices and occupied conventional names before registering unused defaults.
+            requireAvailableName(factory, "entityManagerFactory", entitiesName, "spring.paper.jpa.entity-manager-factory-bean");
+            requireAvailableName(factory, "transactionManager", managerName, "spring.paper.jpa.transaction-manager-bean");
+            if (entitiesName == null) {
                 // 소비자의 EMF는 자체 DataSource/JNDI/JTA 구성을 소유할 수 있다. 먼저 풀을 만들면
                 // 사용하지 않을 URL을 강제하거나 관련 없는 다중 DataSource 선택 때문에 시작이 실패한다.
                 // 기본 EMF를 실제로 생성하는 경로에서만 기본 풀과 DataSource 선택을 준비한다.
                 String[] sources = DefaultBeans.candidates(factory, DataSource.class).toArray(String[]::new);
                 String requestedSource = properties.text("spring.paper.jpa.data-source-bean", "");
+                if (!requestedSource.isBlank()) requireResource(factory, requestedSource, DataSource.class, "spring.paper.jpa.data-source-bean");
                 if (sources.length == 0 && requestedSource.isBlank()) {
                     var sourceDefinition = new RootBeanDefinition(HikariDataSource.class, () -> createDataSource(properties));
                     sourceDefinition.setDestroyMethodName("close");
@@ -72,13 +78,11 @@ public class JpaConfiguration {
                 definition.setLazyInit(true);
                 definition.setFallback(true);
                 registry.registerBeanDefinition("entityManagerFactory", definition);
-            } else if (factories.length > 0) {
-                String existing = choose(properties, "spring.paper.jpa.entity-manager-factory-bean", factories);
-                if (!existing.equals("entityManagerFactory")) registry.registerAlias(existing, "entityManagerFactory");
+            } else if (!factory.containsBean("entityManagerFactory")) {
+                registry.registerAlias(entitiesName, "entityManagerFactory");
             }
 
-            String[] managers = DefaultBeans.candidates(factory, PlatformTransactionManager.class).toArray(String[]::new);
-            if (managers.length == 0) {
+            if (managerName == null) {
                 var manager = new RootBeanDefinition(JpaTransactionManager.class, () -> {
                     EntityManagerFactory entities = factory.getBean("entityManagerFactory", EntityManagerFactory.class);
                     PaperThreadAccess threads = factory.getBeanProvider(PaperThreadAccess.class).getIfAvailable();
@@ -87,21 +91,38 @@ public class JpaConfiguration {
                 manager.setLazyInit(true);
                 manager.setFallback(true);
                 registry.registerBeanDefinition("transactionManager", manager);
-            } else {
-                String existing = choose(properties, "spring.paper.jpa.transaction-manager-bean", managers);
-                if (!existing.equals("transactionManager")) registry.registerAlias(existing, "transactionManager");
+            } else if (!factory.containsBean("transactionManager")) {
+                registry.registerAlias(managerName, "transactionManager");
             }
         };
     }
 
-    private static String choose(PaperConfiguration config, String key, String[] names) {
+    private static String select(ConfigurableListableBeanFactory factory, PaperConfiguration config, String key, Class<?> type) {
         String selected = config.text(key, "");
         if (!selected.isBlank()) {
-            if (!List.of(names).contains(selected)) throw new IllegalArgumentException(key + " is not an existing bean: " + selected);
+            requireResource(factory, selected, type, key);
             return selected;
         }
-        if (names.length != 1) throw new IllegalArgumentException("Multiple resources; configure " + key);
-        return names[0];
+        var names = DefaultBeans.candidates(factory, type);
+        if (names.size() > 1) throw new IllegalArgumentException("Multiple resources; configure " + key);
+        return names.isEmpty() ? null : names.getFirst();
+    }
+    private static void requireResource(ConfigurableListableBeanFactory factory, String name, Class<?> type, String key) {
+        if (!factory.containsBean(name)) {
+            throw new IllegalArgumentException(key + " must name an existing " + type.getSimpleName() + " bean: " + name);
+        }
+        Class<?> actual = factory.getType(name, false);
+        // A named raw FactoryBean can expose its product type only after initialization. Do not
+        // instantiate it for selection: Spring's later typed lookup validates that explicit choice.
+        if (actual != null && actual != Object.class && !type.isAssignableFrom(actual)) {
+            throw new IllegalArgumentException(key + " must name an existing " + type.getSimpleName() + " bean: " + name);
+        }
+    }
+    private static void requireAvailableName(ConfigurableListableBeanFactory factory, String name, String selected, String key) {
+        if (factory.containsBean(name) && !name.equals(selected)
+                && (selected == null || !List.of(factory.getAliases(selected)).contains(name))) {
+            throw new IllegalStateException("JPA bean name '" + name + "' is already owned; rename the dedicated bean or select it with " + key + "=" + name);
+        }
     }
     private static HikariDataSource createDataSource(PaperConfiguration config) {
         HikariConfig hikari = new HikariConfig();

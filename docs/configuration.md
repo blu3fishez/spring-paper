@@ -125,6 +125,14 @@ repositories/entities는 제한된 패키지 목록 또는 쉼표 구분 문자�
 - `spring.paper.jpa.entity-manager-factory-bean`
 - `spring.paper.jpa.transaction-manager-bean`
 
+이름 설정은 Spring alias와 `defaultCandidate=false` 자원도 명시적으로 선택한다. 없는 이름과 예측된
+잘못된 타입은 기본 풀을 만들기 전에 거절한다. 명시적으로 선택한 FactoryBean의 제품 타입이 아직 없으면
+조기 생성하지 않고 실제 생성 때 Spring의 typed lookup으로 검증한다. 자동 발견에는 예측 가능한 제품 타입이 필요하다.
+기본 저장소 참조 이름 `entityManagerFactory`·`transactionManager`를 다른 전용 빈이 이미 소유하면
+라이브러리가 덮어쓰지 않는다. 해당 소유자를 쓰려면 예를 들어
+`spring.paper.jpa.entity-manager-factory-bean: entityManagerFactory`로 선택하고, 독립 전용 자원이면
+그 빈을 다른 이름으로 선언한다. 선택한 자원의 종료는 기존 Spring/외부 소유권을 유지한다.
+
 새 DataSource를 만들 때만 datasource 설정이 필요하다. JDBC 드라이버는 소비 플러그인이 제공한다. Hibernate 엔티티를 게임 세션에 공유하지 않고 트랜잭션 안에서 완료된 값을 반환한다. 소유권·revision·조건부 갱신·영향 행 수·정산 원자성은 저장소의 명시적 계약으로 유지한다.
 
 명시적으로 JPA 매니저를 제공할 때는 `PaperJpaTransactions.workerOnly(entityManagerFactory, paperThreadAccess)`로

@@ -39,6 +39,13 @@ spring.paper.jpa.datasource.url을 요구하지 않는다. JPA는 다중 EMF/매
 기존 계약을 유지한다. `spring.paper.jpa.entity-manager-factory-bean`·`transaction-manager-bean`으로 선택한다.
 DataSource의 일반 주입 선택은 Spring의 Primary/Fallback 규칙을 따른다.
 
+JPA의 명시적인 이름 설정은 alias와 `defaultCandidate=false` 전용 자원도 선택한다. 제품 타입이
+예측 가능한 FactoryBean을 이 선택 때문에 조기 생성하지 않는다. 없는 이름과 예측된 잘못된 타입은
+기본 풀 생성 전에 거절한다. 명시적으로 이름을 고른 FactoryBean의 제품 타입이 아직 없으면 조기
+생성하지 않고 실제 생성 때 Spring의 typed lookup으로 검증한다. `entityManagerFactory`·`transactionManager`가 전용 자원으로 이미 점유되어 일반 기본을
+연결할 수 없으면 덮어쓰지 않고 시작을 거절한다. 그 자원이 JPA의 선택 대상이면 해당 이름 설정으로
+명시하고, 별도 전용 자원이면 빈 이름을 바꾼다. 이미 같은 자원을 가리키는 alias는 그대로 재사용한다.
+
 worker와 Security timer는 **역할 qualifier**로 선택하며 유지보수용 기본 scheduler와 섞지 않는다.
 전용 worker도 그 역할에는 정상 후보가 된다. 설정과 소유권은 [실행 계약](execution-contracts.md)을 참고한다.
 
