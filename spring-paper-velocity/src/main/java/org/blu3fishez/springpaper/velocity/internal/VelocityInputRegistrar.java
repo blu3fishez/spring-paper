@@ -3,6 +3,7 @@ package org.blu3fishez.springpaper.velocity.internal;
 import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.proxy.ProxyServer;
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -15,6 +16,7 @@ import org.blu3fishez.springpaper.velocity.annotation.VelocityEventListener;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 
 /** Owns only the registrations acquired by this application, including partial native failures. */
 public final class VelocityInputRegistrar implements AutoCloseable {
@@ -49,6 +51,11 @@ public final class VelocityInputRegistrar implements AutoCloseable {
         var registrations = new ArrayList<Registration>();
         Set<String> aliases = new HashSet<>();
         for (String name : candidates) {
+            // A singleton FactoryBean can supply a fresh input on every lookup. Its definition's
+            // scope describes the factory, so validate the effective product contract as well.
+            if (!beans.isSingleton(name)) {
+                throw new IllegalArgumentException(name + ": Velocity input beans must be eager singletons; FactoryBean products must also be singletons");
+            }
             Object bean = context.getBean(name);
             boolean listener = listener(beans, name);
             var annotation = command(beans, name);
@@ -111,10 +118,18 @@ public final class VelocityInputRegistrar implements AutoCloseable {
         if (closed || stopping.getAsBoolean()) throw new IllegalStateException("Velocity application is stopping");
     }
     private static boolean listener(ConfigurableListableBeanFactory beans, String name) {
-        return beans.findAnnotationOnBean(name, VelocityEventListener.class, false) != null;
+        return annotation(beans, name, VelocityEventListener.class) != null;
     }
     private static VelocityCommand command(ConfigurableListableBeanFactory beans, String name) {
-        return beans.findAnnotationOnBean(name, VelocityCommand.class, false);
+        return annotation(beans, name, VelocityCommand.class);
+    }
+    private static <A extends Annotation> A annotation(ConfigurableListableBeanFactory beans, String name, Class<A> type) {
+        A declared = beans.findAnnotationOnBean(name, type, false);
+        if (declared != null) return declared;
+        Object singleton = beans.getSingleton(name);
+        // Programmatically registered JDK proxies have no bean definition carrying target metadata.
+        // Read Spring's target class only to classify; never obtain or invoke the unwrapped target.
+        return singleton == null ? null : AnnotatedElementUtils.findMergedAnnotation(AopUtils.getTargetClass(singleton), type);
     }
     private static Throwable collect(Throwable failure, Throwable error) {
         if (failure == null) return error;

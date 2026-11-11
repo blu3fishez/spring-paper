@@ -166,6 +166,29 @@ class VelocityInputTest {
         VelocityHost.execute(application.shutdown());
     }
 
+    @Test void manuallyRegisteredJdkProxyUsesTargetMetadataToFailClearlyWithoutUnwrapping() {
+        var host = new VelocityHost();
+        var factory = new ProxyFactory(new NativeListener());
+        factory.setInterfaces(ReloadReceiver.class);
+        var application = host.application(ProxyConfiguration.class,
+                context -> context.getBeanFactory().registerSingleton("manualProxy", factory.getProxy()));
+        var failure = assertThrows(IllegalArgumentException.class, () -> VelocityHost.execute(application.initialize()));
+        assertTrue(failure.getMessage().contains("JDK proxies hide"));
+        assertFalse(application.isReady());
+        verifyNoInteractions(host.events, host.commands);
+        VelocityHost.execute(application.shutdown());
+    }
+
+    @Test void singletonFactoryCannotRegisterNonSingletonListenerProducts() {
+        var host = new VelocityHost();
+        var application = host.application(FactoryConfiguration.class);
+        var failure = assertThrows(IllegalArgumentException.class, () -> VelocityHost.execute(application.initialize()));
+        assertTrue(failure.getMessage().contains("FactoryBean products must also be singletons"));
+        assertFalse(application.isReady());
+        verifyNoInteractions(host.events, host.commands);
+        VelocityHost.execute(application.shutdown());
+    }
+
     @Test void lazyInputIsRejectedBeforeAnyNativeRegistration() {
         var host = new VelocityHost();
         var application = host.application(LazyConfiguration.class);
@@ -214,5 +237,14 @@ class VelocityInputTest {
     @Configuration(proxyBeanMethods = false)
     static class LazyConfiguration {
         @Bean @Lazy @VelocityEventListener NativeListener lazy() { return new NativeListener(); }
+    }
+    @Configuration(proxyBeanMethods = false)
+    static class FactoryConfiguration {
+        @Bean NonSingletonListenerFactory listenerFactory() { return new NonSingletonListenerFactory(); }
+    }
+    static class NonSingletonListenerFactory implements org.springframework.beans.factory.FactoryBean<NativeListener> {
+        @Override public NativeListener getObject() { return new NativeListener(); }
+        @Override public Class<?> getObjectType() { return NativeListener.class; }
+        @Override public boolean isSingleton() { return false; }
     }
 }
