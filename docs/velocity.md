@@ -62,6 +62,8 @@ class GuideCommand implements SimpleCommand {
 `@Conditional`·profile로 활성 입력을 정한다. 새 기능을 추가할 때 라이브러리나 중앙 목록에 타입을
 나열하지 않는다. 입력은 eager singleton이어야 한다. 비활성 모드를 `@Lazy`로 숨기는 구성은 거절한다.
 명령의 canonical alias와 secondary aliases에는 Spring property placeholder를 사용할 수 있다.
+클래스의 `@VelocityCommand.value`는 기존과 같이 Spring 빈 이름도 지정한다. 표준 `@AliasFor`로
+`Component.value`에 명시적으로 연결하므로 Spring 7의 폐기 예정 이름 추론에 의존하지 않는다.
 중복·기존 native alias 충돌은 어떤 입력도 획득하기 전에 거절한다.
 
 라이브러리는 활성 listener 객체를 `EventManager.register(plugin, listener)`에 그대로 전달한다.
