@@ -72,6 +72,9 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
         return bean;
     }
 
+    /** Immutable discovery snapshot for existing diagnostics; never creates beans or resolves products. */
+    public Map<String, Class<?>> candidates() { return Map.copyOf(candidates); }
+
     /** Resolve active products after refresh, without eagerly probing unrelated FactoryBeans. */
     Map<String, Class<?>> candidates(ConfigurableListableBeanFactory beans) {
         Map<String, Class<?>> resolved = new LinkedHashMap<>();
@@ -90,7 +93,10 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
             if (bean instanceof FactoryBean<?>) continue;
             resolved.put(name, type);
         }
-        return Map.copyOf(resolved);
+        // Keep the existing diagnostic snapshot aligned with the products prepared on this worker.
+        candidates.clear();
+        candidates.putAll(resolved);
+        return candidates();
     }
 
     private static boolean adapter(Class<?> type) {

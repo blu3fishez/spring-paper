@@ -16,6 +16,20 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 class PaperLifecycleRelationTest {
+    @Test void externalDiagnosticsCanPassThePublicCatalogSnapshotToLifecyclePlanning() {
+        var calls = new ArrayList<String>();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(org.blu3fishez.springpaper.bootstrap.PaperBeanCatalog.class);
+            context.registerBean("owner", Owner.class, () -> new Owner("owner", calls));
+            context.refresh();
+            var catalog = context.getBean(org.blu3fishez.springpaper.bootstrap.PaperBeanCatalog.class);
+            try (var lifecycle = new PaperLifecycleManager(context, catalog.candidates())) {
+                lifecycle.start();
+            }
+            assertEquals(List.of("start:owner", "stop:owner"), calls);
+        }
+    }
+
     public interface Operations { void start(); void stop(); }
     public static class Owner implements Operations {
         final String name;

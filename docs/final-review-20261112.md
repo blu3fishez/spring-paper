@@ -72,6 +72,17 @@ main에서는 확정된 같은 제품의 훅과 native 입력 등록을 실행�
 Spring destruction 소유권은 그대로다. 준비 실패 시 factory는 한 번 닫고 아직 시작하지 않은
 Paper 훅은 실행하지 않는다. 새 public API나 별도 dispatcher를 추가하지 않았다.
 
+최종 소비자 통합에서는 기존 `LifecycleOrderAssertions`가 public `PaperBeanCatalog.candidates()`를
+직접 호출한다는 호환성 경계도 확인했다. worker 내부의 제품 확정 메서드로 이를 대체하면서
+삭제했던 no-arg public 시그니처를 복원했다. 기존처럼 불변 snapshot을 읽기만 하며 빈이나 제품을
+생성하지 않는다. worker가 확정한 제품 metadata를 기존 catalog map에 반영하므로 FactoryBean
+제품과 factory-method 리스너도 같은 snapshot으로 진단한다. 별도 상태 저장소나 public 생성 API는 없다.
+다른 패키지의 `PaperLifecycleRelationTest`에서 이 public snapshot으로 실제 lifecycle을 계획·실행하는
+회귀를 추가했다. 후속 focused 실행은 FactoryProductBootstrap/ConsumerBootstrap/ApplicationLifecycle/
+PaperLifecycleRelation 총 34개가 failure/error/skip 없이 통과했고 소스 크기·diff 검사도 통과했다.
+로그는 `catalog-noarg-compatibility.log`다. 아래 전체 build 271개 결과는 이 후속 수정 직전 기록이며,
+추가 회귀 1개를 포함한 이후 전체 통합 결과는 상위 작업에서 별도로 확인한다.
+
 ## RED·GREEN 및 변형 검증
 
 | 문제 | RED/독립 결과 | 수정 후 GREEN 및 방어 변형 |

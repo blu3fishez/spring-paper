@@ -82,6 +82,7 @@ class FactoryProductBootstrapTest {
         try (var application = SpringPaperApplication.run(host)) {
             product = application.context().getBean(Input.class);
             factory = application.context().getBean("&input", InputFactory.class);
+            assertEquals(Input.class, application.context().getBean(PaperBeanCatalog.class).candidates().get("input"));
             assertEquals(0, factory.factoryStarts.get());
             assertEquals(1, product.starts.get(), "Factory product startup must run before input registration");
             verify(host.getServer().getPluginManager()).registerEvent(eq(Signal.class), any(), any(), any(), eq(host), eq(false));
@@ -148,6 +149,9 @@ class FactoryProductBootstrapTest {
         try (var application = SpringPaperApplication.run(host)) {
             verify(host.getServer().getPluginManager()).registerEvent(eq(Signal.class), any(), any(), any(), eq(host), eq(false));
             assertSame(application.context().getBean("input"), application.context().getBean("input"));
+            var snapshot = application.context().getBean(PaperBeanCatalog.class).candidates();
+            assertEquals(PlainInput.class, snapshot.get("input"));
+            assertThrows(UnsupportedOperationException.class, snapshot::clear);
         }
     }
 
