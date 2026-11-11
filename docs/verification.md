@@ -2,25 +2,40 @@
 
 ## 2026-11-11 Velocity 호스트 어댑터
 
-`spring-paper-velocity`의 native initialize/shutdown EventTask를 API 호스트에서 실행하는 16개
-자동 테스트가 통과했다. 실제 Spring 컨텍스트·실제 CGLIB/JDK 프록시·ThreadPoolTaskScheduler를
-사용한다. 호스트 객체 identity/종료 소유권, initializer와 생성 시 TCCL/복원, 조건부 입력,
-부분 Spring/native 시작 실패, alias 충돌/대체 소유권, 종료 전 입력 해제, 시작 전·refresh 중·
-native 등록 중 종료, 표준 Scheduled/지연 예약 취소를 검증한다.
+`ab8ec69`에서 전체 `build verifySourceSize --rerun-tasks --max-workers=2`가 90개 작업을 모두
+재실행해 258개 테스트(실패·스킵 0)를 통과했다. Velocity 18개, security-core 50개,
+Paper Security 14개를 포함한다. 이후 `87378d8`의 명시적 `@AliasFor` 수정은 Velocity 19개를
+실행해 통과했고, 전체 증분 build는 6개 작업 실행·84개 재사용으로 총 259개의 통과 결과를
+확인했다. 259개를 모두 다시 실행했다는 뜻은 아니다. Javadoc·600줄 검사도 통과했다.
 
-security-core 50개와 Paper Security 14개도 통과했다. 추가 회귀는 명시적인 zero pending timeout이
-만료 task를 만들지 않고 1년 뒤에도 미인증 pending을 유지하며 정상 인증·disconnect가 가능한지,
-operation timeout은 계속 적용되는지 확인한다. 기존 기본 120초 정책은 바꾸지 않는다.
+API 호스트 검증은 실제 Spring 컨텍스트·CGLIB/JDK 프록시·ThreadPoolTaskScheduler로 반환된
+native EventTask를 실행한다. 호스트 identity/종료 소유권, 생성·initializer의 TCCL/복원,
+조건부 입력, 부분 시작 실패, 명령 소유권, 종료 전 입력 해제, 시작 전·refresh 중·native 등록 중
+종료, Scheduled/지연 예약 취소를 확인했다. 독립 검토가 재현한 비싱글턴 FactoryBean 제품과
+수동 등록 JDK 프록시 누락에는 각각 시작 거절 회귀를 추가했다. zero pending timeout은 1년 뒤에도
+미인증 대기를 유지하되 operation timeout과 disconnect를 유지한다. 기본 120초는 바꾸지 않았다.
 
-명령 정리를 획득한 `CommandMeta` 대신 alias 문자열로 바꾼 복사 소스 mutant에서는 소유권 테스트가
-실패했다. 원본 소스는 수정하지 않고 `build/velocity-verification/ownership-mutation`에 별도
-출력했으며 정상 소스의 전체 Velocity 테스트는 통과했다. 기존 `build/usability-audit`는 보존했다.
+`CommandMeta` 대신 alias 문자열로 정리하거나 native 등록 뒤에 획득을 기록하는 소유권 mutant가
+각각 회귀에 검출됐다. `@AliasFor`를 제거한 복사 소스도 Spring 병합 metadata 검사에 실패했다.
+별도 출력에서 검증해 정상 소스를 보존했고, 기존 `build/usability-audit`도 유지했다.
 
-새 [Velocity 최소 예제](../examples/velocity-plugin/README.md)의 included build와 shaded JAR을
-확인했다. `velocity-plugin.json`의 native main, Spring 컨텍스트와 Velocity adapter 클래스가
-포함되며 Paper·Velocity API·SLF4J 구현 클래스는 포함되지 않는다. 라이브러리 모듈 build/Javadoc과
-600줄 검사도 통과했다. 실제 Velocity 프로세스·플레이어 접속·OAuth 왕복·운영 배포·재시작은
-수행하지 않았다. 공개 계약과 공식 구현 근거는 [Velocity 문서](velocity.md)에 있다.
+[최소 예제](../examples/velocity-plugin/README.md)는 included build와 새 로컬 Maven 저장소의
+독립 소비를 모두 확인했다. 독립 소비에는 `includeBuild`가 없으며, 최종 shaded JAR의 라이브러리
+클래스 6개가 새 발행물과 bytecode로 일치했다. native `velocity-plugin.json`과 Spring은 포함하고
+Paper·Velocity API·Guice·SLF4J 호스트 클래스는 포함하지 않는다.
+
+실제 Velocity `4.2.1-SNAPSHOT git-9a5951c7-b43`도 Java 25.0.2·64–256MiB heap으로 임시 폴더의
+`127.0.0.1:25587`에서 두 번 실행했다. 두 실행 모두 플러그인 로드, `spring-velocity`와 `sv`의
+콘솔 응답, 종료 코드 0과 포트 해제를 확인했다. 첫 실행은 60초 뒤 실제 `@Scheduled` 로그까지
+확인했다. 두 번째 실행은 alias 수정 후 해당 Spring 이름 추론 경고가 사라짐을 확인했고,
+60초 예약 작업은 반복하지 않았다. 경고를 숨기는 설정은 추가하지 않았다.
+
+native JAR은 기존 개발 Velocity 컨테이너에서 읽기 전용으로 복사했으며 양쪽 SHA-256이
+`9255dba0acede009dcba713abd84da0310446d5da970ad5060851e1f8a309ac0`으로 일치했다.
+기존 개발 서버의 설정·플러그인·실행 상태는 변경하지 않았다. 실제 클라이언트·Mojang 인증·
+forwarding·OAuth 왕복과 운영 배포·재시작은 검증 범위에 포함하지 않는다.
+공개 계약과 공식 근거는 [Velocity 문서](velocity.md), 실행 근거는 ignored
+`build/velocity-verification/result-alias.json`과 `native-host/console*.log`에 있다.
 
 현재 예약·실행/유틸·예제 개선 결과는 [사용성 보고서](productivity.md)와
 [기계 판독 검증 기록](productivity-verification.json)에 분리했다.

@@ -117,7 +117,10 @@ bootstrap은 컨텍스트 생성부터 정리까지 plugin TCCL을 적용하고 
 새 listener/command의 자동 등록, 표준 `@Scheduled`와 scheduler 소유권을 보여 준다.
 API 호스트 자동 테스트는 반환한 실제 EventTask를 실행해 준비·시작 실패·종료 전 입력 해제·
 시작 전/refresh 중/native 등록 중 종료·CGLIB advice·alias 소유권·스케줄러 종료를 검증한다.
-실제 Velocity 프로세스나 클라이언트 접속 검증과 구분한다. 배포·프록시 기동은 실행하지 않았다.
+별도 격리 검증에서는 정확한 Velocity build 43과 새 Maven 발행물로 실제 시작·명령·별칭·정상
+종료를 확인했다. 첫 실행은 60초 Scheduled 로그를, alias 수정 후 두 번째 실행은 해당 Spring
+경고의 소멸을 확인했다. [실행·테스트 수와 범위](verification.md#2026-11-11-velocity-호스트-어댑터)를
+참고한다. 기존 개발 서버는 변경하지 않았으며 실제 클라이언트·Mojang 인증 검증은 포함하지 않는다.
 
 설계 전에 확인한 공식 문서·소스:
 
