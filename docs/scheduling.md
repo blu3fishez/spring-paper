@@ -25,6 +25,8 @@ Task 필드·start·cancel·close·worker 제출·중복 실행 플래그가 필
 ThreadPoolTaskScheduler가 사용된다. 소비자가 제공한 ScheduledExecutorService가 있으면
 ConcurrentTaskScheduler로 재사용하며 backend 종료는 그 빈의 소유자에게 맡긴다.
 다중 기본 후보는 Spring 표준 @Primary/이름 `taskScheduler`로 선택한다. 임의로 하나를 고르지 않는다.
+소비자 `@Fallback` 기본과 non-fallback 전용 timer를 함께 제공할 때의 직접 타입 조회 순서와
+명시 선택 방법은 [기본 빈 계약](default-beans.md)을 따른다.
 
 ## Paper 메인 스레드의 실제 시간 작업
 

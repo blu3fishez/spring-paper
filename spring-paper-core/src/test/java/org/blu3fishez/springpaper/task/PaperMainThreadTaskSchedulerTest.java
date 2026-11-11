@@ -228,6 +228,101 @@ class PaperMainThreadTaskSchedulerTest {
         }
     }
 
+    public static class SchedulerFactory implements org.springframework.beans.factory.FactoryBean<TaskScheduler>, org.springframework.beans.factory.DisposableBean {
+        private final ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        public SchedulerFactory() { scheduler.setThreadNamePrefix("consumer-factory-"); scheduler.initialize(); }
+        @Override public TaskScheduler getObject() { return scheduler; }
+        @Override public Class<?> getObjectType() { return TaskScheduler.class; }
+        @Override public void destroy() { scheduler.destroy(); }
+    }
+
+    @Test void factoryProductFallbackSchedulerReplacesTheLibraryBackgroundDefault() throws Exception {
+        var host = new Host();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.registerBean("consumerFallbackScheduler", SchedulerFactory.class, SchedulerFactory::new,
+                    definition -> ((AbstractBeanDefinition) definition).setFallback(true));
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            assertFalse(context.containsBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME));
+            assertSame(context.getBean("consumerFallbackScheduler"), context.getBean(TaskScheduler.class));
+            assertTrue(context.getBean(Probe.class).background.get(5, TimeUnit.SECONDS).getName().startsWith("consumer-factory-"));
+        }
+    }
+
+    @Test void qualifierOnlySchedulerFactoryDoesNotSuppressTheBackgroundDefaultOrInitializeDuringSelection() throws Exception {
+        var host = new Host();
+        var creations = new AtomicInteger();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.registerBean("dedicatedScheduler", SchedulerFactory.class, () -> {
+                creations.incrementAndGet(); return new SchedulerFactory();
+            }, definition -> {
+                ((AbstractBeanDefinition) definition).setDefaultCandidate(false);
+                definition.setLazyInit(true);
+            });
+            context.addBeanFactoryPostProcessor(beans -> {
+                PaperCoreConfiguration.paperSchedulingDefaults().postProcessBeanFactory(beans);
+                assertEquals(0, creations.get());
+            });
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            assertTrue(context.containsBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME));
+            var selected = context.getBeanProvider(TaskScheduler.class).getIfAvailable();
+            assertSame(context.getBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME), selected);
+            assertTrue(context.getBean(Probe.class).background.get(5, TimeUnit.SECONDS).getName()
+                    .startsWith("spring-paper-scheduler-"));
+        }
+    }
+
+    @Test void primaryFactorySchedulerIsSelectedAmongConsumerCandidatesWithoutCreatingProductsDuringSelection() throws Exception {
+        var host = new Host();
+        var creations = new AtomicInteger();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.registerBean("primaryScheduler", SchedulerFactory.class, () -> {
+                creations.incrementAndGet();
+                var factory = new SchedulerFactory();
+                factory.scheduler.setThreadNamePrefix("primary-factory-");
+                return factory;
+            }, definition -> definition.setPrimary(true));
+            context.registerBean("otherScheduler", SchedulerFactory.class, SchedulerFactory::new);
+            context.addBeanFactoryPostProcessor(beans -> assertEquals(0, creations.get()));
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            assertFalse(context.containsBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME));
+            assertSame(context.getBean("primaryScheduler"), context.getBean(TaskScheduler.class));
+            assertTrue(context.getBean(Probe.class).background.get(5, TimeUnit.SECONDS).getName().startsWith("primary-factory-"));
+        }
+    }
+
+    static class SelectedProbe {
+        final CompletableFuture<String> execution = new CompletableFuture<>();
+        @Scheduled(scheduler = "consumerFallbackScheduler", initialDelay = 1, fixedDelay = 60000)
+        public void selected() { execution.complete(Thread.currentThread().getName()); }
+    }
+
+    @Test void explicitSchedulerSelectsConsumerFallbackAlongsideDedicatedNonFallbackTimer() throws Exception {
+        var host = new Host();
+        try (var context = new AnnotationConfigApplicationContext()) {
+            PaperCoreConfiguration.registerHost(context, host.plugin, new PaperConfiguration(context.getEnvironment()));
+            context.registerBean("consumerFallbackScheduler", SchedulerFactory.class, SchedulerFactory::new,
+                    definition -> ((AbstractBeanDefinition) definition).setFallback(true));
+            context.registerBean("dedicatedScheduler", SchedulerFactory.class, () -> {
+                var factory = new SchedulerFactory();
+                factory.scheduler.setThreadNamePrefix("dedicated-factory-");
+                return factory;
+            }, definition -> ((AbstractBeanDefinition) definition).setDefaultCandidate(false));
+            context.registerBean(SelectedProbe.class);
+            context.register(WithoutConsumerScheduler.class);
+            context.refresh();
+            assertFalse(context.containsBean(PaperCoreConfiguration.DEFAULT_SCHEDULER_BEAN_NAME));
+            // Consumer-provided Fallback metadata retains Spring's direct type-lookup semantics.
+            assertTrue(context.getBean(Probe.class).background.get(5, TimeUnit.SECONDS).getName().startsWith("dedicated-factory-"));
+            assertTrue(context.getBean(SelectedProbe.class).execution.get(5, TimeUnit.SECONDS).startsWith("consumer-factory-"));
+        }
+    }
+
     @Test void standardScheduledUsesTheRealNamedBeanAndUnqualifiedJobsKeepTheConsumerScheduler() throws Exception {
         var host = new Host();
         try (var context = new AnnotationConfigApplicationContext()) {

@@ -4,10 +4,15 @@ import org.blu3fishez.springpaper.internal.PaperLifecycleAnnotations;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.stream.Stream;
 import java.util.concurrent.ConcurrentHashMap;
 import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.annotation.PaperEventListener;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.MergedBeanDefinitionPostProcessor;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -19,6 +24,9 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
     private final Map<String, Class<?>> candidates = new ConcurrentHashMap<>();
 
     @Override public void postProcessMergedBeanDefinition(RootBeanDefinition definition, Class<?> type, String beanName) {
+        // This callback describes a FactoryBean itself, not its product. Spring only applies
+        // postProcessAfterInitialization to products; never transfer factory hooks to that product.
+        if (FactoryBean.class.isAssignableFrom(type)) return;
         boolean stop = false;
         boolean lifecycle = false;
         for (Method method : ReflectionUtils.getAllDeclaredMethods(type)) {
@@ -56,5 +64,39 @@ public final class PaperBeanCatalog implements MergedBeanDefinitionPostProcessor
                 || !AnnotatedElementUtils.getMergedRepeatableAnnotations(type, PaperCommandExecutor.class).isEmpty()) candidates.put(beanName, type);
     }
 
-    public Map<String, Class<?>> candidates() { return Map.copyOf(candidates); }
+    @Override public Object postProcessAfterInitialization(Object bean, String beanName) {
+        if (!(bean instanceof FactoryBean<?>)) {
+            Class<?> type = AopUtils.getTargetClass(bean);
+            if (adapter(type)) candidates.put(beanName, type);
+        }
+        return bean;
+    }
+
+    /** Resolve active products after refresh, without eagerly probing unrelated FactoryBeans. */
+    Map<String, Class<?>> candidates(ConfigurableListableBeanFactory beans) {
+        Map<String, Class<?>> resolved = new LinkedHashMap<>();
+        var names = Stream.concat(Arrays.stream(beans.getBeanDefinitionNames()),
+                Arrays.stream(beans.getSingletonNames())).distinct().sorted().toList();
+        for (String name : names) {
+            Class<?> predicted = beans.getType(name, false);
+            boolean listener = beans.findAnnotationOnBean(name, PaperEventListener.class, false) != null;
+            if (!listener && !candidates.containsKey(name) && !adapter(predicted)) continue;
+            if (beans.containsBeanDefinition(name) && beans.getBeanDefinition(name).isLazyInit()
+                    || !beans.isSingleton(name)) {
+                throw new IllegalArgumentException(name + ": Paper adapters and lifecycle hooks must be eager singletons; FactoryBean products must also be singletons");
+            }
+            Object bean = beans.getBean(name);
+            Class<?> type = AopUtils.getTargetClass(bean);
+            if (bean instanceof FactoryBean<?>) continue;
+            resolved.put(name, type);
+        }
+        return Map.copyOf(resolved);
+    }
+
+    private static boolean adapter(Class<?> type) {
+        return type != null && !FactoryBean.class.isAssignableFrom(type)
+                && (AnnotatedElementUtils.hasAnnotation(type, PaperEventListener.class)
+                || !AnnotatedElementUtils.getMergedRepeatableAnnotations(type, PaperCommandExecutor.class).isEmpty()
+                || Arrays.stream(ReflectionUtils.getAllDeclaredMethods(type)).anyMatch(PaperLifecycleAnnotations::hook));
+    }
 }

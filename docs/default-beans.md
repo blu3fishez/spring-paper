@@ -1,8 +1,14 @@
 # 기본 빈과 전용 빈
 
-기본 빈은 실제 typed @Bean 정의로 노출한다. @Lazy로 필요할 때 생성하고 @Fallback으로 성격을 표시한다.
+기본 빈은 실제 typed @Bean 정의로 노출하며 @Lazy로 필요할 때 생성한다.
 소비자가 정상 기본 후보를 제공하면 공급자 정의를 제거한다. 후보 존재 판단은 Spring의
 `isAutowireCandidate(DependencyDescriptor)`를 사용한다. 타입 이름만 세거나 빈을 미리 만들어 선택하지 않는다.
+
+대부분의 기본 빈은 `@Fallback`도 사용하지만 일반 scheduler와 CacheManager에는 붙이지 않는다.
+Spring 7.0.10의 TaskSchedulerRouter·CacheAspectSupport는 주입 descriptor 대신 직접 타입으로 조회한다.
+이 경로는 유일한 non-fallback을 defaultCandidate 판정보다 먼저 선택하므로, 라이브러리 기본에
+Fallback을 붙이면 `defaultCandidate=false`인 소비자 전용 자원으로 예약·캐시 업무가 흘러간다.
+이 두 기본은 후보가 있으면 정의를 제거하는 동일한 절차만으로 교체를 처리한다.
 
 | 소비자 제공 | 일반 주입 결과 | 라이브러리 기본 생성 |
 |---|---|---|
@@ -14,6 +20,12 @@
 | 소비자 @Fallback만 | 소비자 Fallback | 안 함 |
 | 일반 기본 + 소비자 @Fallback | Spring이 일반 기본 선택 | 안 함 |
 | FactoryBean 제품 | 예측 가능한 제품 타입으로 같은 규칙 | 기본 안 함, 제품은 정상 생성 시점에만 생성 |
+
+표의 일반 주입은 Spring의 dependency descriptor 경로다. 소비자가 직접 `@Fallback` 기본과
+non-fallback 전용 자원을 함께 제공하면 Spring의 위 직접 조회 순서는 그대로 적용된다.
+그 조합에서 일반 `@Scheduled`의 대상을 고정하려면 `scheduler` 이름 또는 `SchedulingConfigurer`를,
+`@Cacheable`의 대상을 고정하려면 `CachingConfigurer`의 manager/resolver 또는 `cacheManager` 이름을
+명시한다. 라이브러리가 소비자의 Primary/Fallback metadata를 바꾸거나 Spring 선택을 우회하지 않는다.
 
 ```java
 @Bean(defaultCandidate = false)

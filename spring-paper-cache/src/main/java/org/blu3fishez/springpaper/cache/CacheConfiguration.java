@@ -9,13 +9,14 @@ import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.transaction.TransactionAwareCacheManagerProxy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Fallback;
 import org.springframework.context.annotation.Lazy;
 
 @Configuration(proxyBeanMethods = false)
 @EnableCaching
 public class CacheConfiguration {
-    @Bean @Lazy @Fallback
+    // CacheAspectSupport selects by getBean(CacheManager.class), not an injection descriptor.
+    // @Fallback would select a dedicated non-default manager first; backOff owns replacement.
+    @Bean @Lazy
     public CacheManager paperDefaultCacheManager(PaperConfiguration configuration) {
         var names = configuration.strings("spring.paper.cache.names");
         if (names.isEmpty()) throw new IllegalArgumentException("spring.paper.cache.names is required for the default Caffeine manager");

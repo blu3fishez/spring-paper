@@ -109,7 +109,9 @@ public class PaperCoreConfiguration {
     public PaperMainThreadTaskScheduler paperMainThreadScheduler(PaperTasks tasks, ObjectProvider<Clock> clocks) {
         return new PaperMainThreadTaskScheduler(tasks, clocks.getIfAvailable(Clock::systemUTC));
     }
-    @Bean(DEFAULT_SCHEDULER_BEAN_NAME) @Lazy @Fallback
+    // This definition is removed when a consumer default exists. @Fallback here would let
+    // resolveNamedBean select a lone non-default consumer timer before defaultCandidate filtering.
+    @Bean(DEFAULT_SCHEDULER_BEAN_NAME) @Lazy
     public TaskScheduler paperDefaultTaskScheduler(ObjectProvider<ScheduledExecutorService> executors,
             ObjectProvider<Clock> clocks, BeanFactory beans) {
         Clock clock = clocks.getIfAvailable(Clock::systemUTC);
@@ -136,7 +138,9 @@ public class PaperCoreConfiguration {
             // Spring's TaskSchedulerRouter uses getBean by type: a lone qualifier-only scheduler is
             // still selected there. Keep the native Spring background fallback unless a consumer
             // provides its own default. Decide after all consumer @Bean methods have been parsed.
-            for (String name : beans.getBeanNamesForType(TaskScheduler.class, false, false)) {
+            // FactoryBean product singleton status may be unknown until initialization. Include
+            // predicted products without creating them, then use their candidate metadata below.
+            for (String name : beans.getBeanNamesForType(TaskScheduler.class, true, false)) {
                 if (name.equals(DEFAULT_SCHEDULER_BEAN_NAME)) continue;
                 // Spring's AutowireUtils is package-private. Read its public merged-definition metadata.
                 var definition = beans.containsBeanDefinition(name) ? beans.getMergedBeanDefinition(name) : null;

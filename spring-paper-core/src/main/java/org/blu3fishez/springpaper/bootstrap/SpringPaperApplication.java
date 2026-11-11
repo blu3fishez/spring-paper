@@ -105,12 +105,16 @@ public final class SpringPaperApplication implements AutoCloseable {
         // 컨텍스트 refresh는 DB 연결/스키마 검사를 포함한다. 작업자에서 준비하되 완료를 기다린다.
         // 기다리지 않고 onEnable을 반환하면 미완성 컨텍스트로 이벤트가 들어오는 시작 경쟁이 생긴다.
         // Spring의 PostConstruct/SmartLifecycle은 이 작업자에서 호출되므로 Paper 변경은 아래 훅에서 한다.
+        java.util.Map<String, Class<?>> candidates;
         try (var preparation = Executors.newVirtualThreadPerTaskExecutor()) {
-            preparation.submit(() -> withLoader(loader, context::refresh)).get();
+            candidates = preparation.submit(() -> withLoader(loader, () -> {
+                context.refresh();
+                // Ordinary FactoryBeans create their product on first lookup, not necessarily
+                // during refresh. Product preparation/postprocessing still belongs to this worker.
+                return context.getBean(PaperBeanCatalog.class).candidates(factory);
+            })).get();
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw error; }
         catch (ExecutionException error) { throw new IllegalStateException("Spring context preparation failed", error.getCause()); }
-        PaperBeanCatalog catalog = context.getBean(PaperBeanCatalog.class);
-        var candidates = catalog.candidates();
         lifecycle = new PaperLifecycleManager(context, candidates);
         lifecycle.start();
         var invocations = new PaperInvocationService(context.getBeanProvider(PaperInvocationInterceptor.class).orderedStream().toList(), loader);
@@ -132,7 +136,8 @@ public final class SpringPaperApplication implements AutoCloseable {
         context.getBeanProvider(PaperEventOrderConfigurer.class).orderedStream()
                 .forEach(configurer -> configurer.configure(eventOrder));
         listeners.registerAll(adapters.stream()
-                .filter(entry -> factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null)
+                .filter(entry -> AnnotatedElementUtils.hasAnnotation(entry.type, PaperEventListener.class)
+                        || factory.findAnnotationOnBean(entry.name, PaperEventListener.class, false) != null)
                 .map(entry -> new PaperListenerRegistrar.Candidate(entry.name, entry.bean, entry.type)).toList(),
                 context.getBeanProvider(PaperEventOrderContributor.class).orderedStream()
                         .flatMap(contributor -> List.copyOf(contributor.relations()).stream()).toList(), eventOrder);
@@ -144,11 +149,11 @@ public final class SpringPaperApplication implements AutoCloseable {
         context.publishEvent(new PaperApplicationReadyEvent(plugin));
     }
 
-    private static void withLoader(ClassLoader loader, Runnable action) {
+    private static <T> T withLoader(ClassLoader loader, java.util.function.Supplier<T> action) {
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);
-        try { action.run(); } finally { thread.setContextClassLoader(previous); }
+        try { return action.get(); } finally { thread.setContextClassLoader(previous); }
     }
     private record Adapter(String name, Object bean, Class<?> type) {}
 
