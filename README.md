@@ -2,6 +2,10 @@
 
 Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다. Spring Boot와 별도 제공 플러그인을 요구하지 않는다. Paper가 만든 플러그인 인스턴스와 플러그인별 하나의 컨텍스트를 사용한다.
 
+Velocity는 독립적인 [`spring-paper-velocity`](docs/velocity.md) 모듈로 연결한다. native Guice 진입점은
+유지하고 initialize/shutdown EventTask와 실제 호스트 빈·활성 입력 등록·정리 소유권을 제공한다.
+Paper 모듈 없이 사용하는 [최소 예제](examples/velocity-plugin/README.md)가 있다.
+
 이 저장소는 초기 개발 단계다. Maven Central·Gradle Plugin Portal 공개 배포와 라이선스 선정은 아직 진행하지 않았다. 현재는 included build 또는 로컬 Maven 배포로 사용한다.
 
 ## 조사와 범위
@@ -220,6 +224,7 @@ Spring Boot 런타임과 starter 자동 구성은 사용하지 않는다.
 | `spring-paper-cache` | Spring Cache, Caffeine 기본 제공자, 커밋 뒤 캐시 변경, 기존 CacheManager 재사용 | `spring.paper.cache.enabled` |
 | `spring-paper-security` | 메서드 인가, 소비자 교체형 인증 문맥·거절 처리, 선택형 Paper 접속 어댑터 | `spring.paper.security.enabled` |
 | `spring-paper-security-core` | 호스트 중립 인증 필터·세션·대기·결과 처리, Spring AuthenticationManager/Provider 연동 | Paper Security가 자동 import; 단독 소비는 `@Import(PaperConnectionSecurityConfiguration.class)` |
+| `spring-paper-velocity` | native Velocity bootstrap, 실제 호스트 빈, 활성 listener/command 등록·해제 | native 진입점에서 `SpringVelocityApplication`에 위임 |
 
 YAML 자동 구성에는 모듈 JAR과 enabled가 필요하다. PDC의 명시적인 Enable 어노테이션은 해당 구성에서 직접 활성화한다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
 

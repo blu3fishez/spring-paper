@@ -8,7 +8,7 @@
 - spring-paper-security: Spring Paper 입력 문맥, 선택형 Paper 접속 어댑터, 동기 snapshot과 기본 응답 처리. security-core를 포함한다.
 - 소비자: 인증 증거의 검증, 필요한 인증 조건, 저장소 I/O·직렬화, 대기 UI·외부 OAuth 콜백과 플랫폼 효과.
 
-Core를 단독 사용하는 Spring 컨텍스트에서는 `@Import(PaperConnectionSecurityConfiguration.class)`를 사용한다. 공통 모듈도 합의한 Java 25 대상이다. 기존 Velocity의 Java 21 bytecode 설정만 보고 runtime 호환을 가정하면 안 되며 도입할 프록시의 실제 JVM을 확인해야 한다. 이번 변경은 SimpleExtraction/Velocity runtime이나 배포 설정을 바꾸지 않았다.
+Core를 단독 사용하는 Spring 컨텍스트에서는 `@Import(PaperConnectionSecurityConfiguration.class)`를 사용한다. 공통 모듈도 합의한 Java 25 대상이다. 기존 Velocity의 Java 21 bytecode 설정만 보고 runtime 호환을 가정하면 안 되며 도입할 프록시의 실제 JVM을 확인해야 한다. Velocity 호스트 연결은 별도 [Velocity 모듈](velocity.md)을 사용한다.
 
 ## 소비자 확장 지점
 
@@ -104,6 +104,13 @@ PaperSecuritySessionRepository의 각 메서드는 호출 스레드에서 즉시
 - 자격 증명·SecurityContext·Player 객체를 저장하지 않는다. 소비자의 영속 모델에 맞춰 검증된 식별자·권한·접속 토큰과 필요한 metadata만 직렬화한다.
 - 같은 접속의 동시 인증 작업은 거절하며, 재시도로 최초 pending deadline을 늘리지 않는다.
 
+`PaperSecuritySettings.pendingTimeout`은 기본 120초다. 기존 소비자 정책상 무기한 대기가 필요할
+때만 `Duration.ZERO` 또는 `spring.paper.security.pending-timeout-seconds: 0`을 명시한다.
+이 경우 pending snapshot은 `Instant.MAX`를 사용하고 만료 task를 예약하지 않는다. 미인증 상태는
+그대로이며 인증 작업별 operation timeout·접속 종료·명시적 철회·shutdown은 계속 적용한다.
+원격 저장소 어댑터는 기존 인증 완료 snapshot과 마찬가지로 `Instant.MAX`를 표현하고 native TTL로
+변환하지 않아야 한다. 음수 pending timeout과 0 이하 operation/shutdown timeout은 거절한다.
+
 저장소 삭제가 멈추거나 실패해도 로컬 인증은 먼저 무효화하고 대기 중인 작업을 종료한다. PaperSecurityConnectionInvalidatedEvent는 이 로컬 철회를 뜻한다. PaperSecuritySessionChangedEvent의 terminal 상태도 원격 삭제 성공을 뜻하지 않는다. 삭제와 handler 완료는 disconnect/shutdown의 stage로 확인한다. 네트워크 장애·프로세스 강제 종료에 대비한 TTL/내구성 정책은 저장소 어댑터가 소유한다.
 
 종료는 새 요청 차단과 모든 소유 연결의 로컬 철회·정리 ACK 예약을 한 admission 경계에서 끝낸 뒤,
@@ -148,7 +155,10 @@ PaperSecurityInterceptor는 호출 시작에 빈 SecurityContext를 설정하고
 
 ## Velocity와 외부 OAuth 연결
 
-Velocity 소비자는 security-core만 의존하고 자신의 이벤트 어댑터에서 동일한 서비스를 호출할 수 있다. Core의 자동 테스트는 Bukkit/Velocity API가 없는 classpath에서 소비자 Manager/Provider·저장소·대기 처리기를 주입해 검증한다. 공식 Velocity bootstrap이나 Velocity runtime을 이번 변경에 추가하지 않았다.
+Velocity 소비자는 [spring-paper-velocity](velocity.md)와 security-core를 같은 컨텍스트에 조립하고
+자신의 이벤트 어댑터에서 동일한 보안 서비스를 호출할 수 있다. Core만 단독 사용하는 것도 가능하다.
+Core의 자동 테스트는 Bukkit/Velocity API가 없는 classpath에서 소비자 Manager/Provider·저장소·
+대기 처리기를 주입해 검증한다. 특정 게임의 인증 규칙이나 Velocity 프로세스 실행을 포함하지 않는다.
 
 - 기존 프록시의 온라인/오프라인 프로토콜 선택과 Mojang 검증 결과를 소비자 어댑터가 올바른 단계에서 확인한다. PreLogin에서 요청한 online mode만으로 검증 완료로 취급하지 않는다.
 - 실제 입장 판정 단계의 비동기 결과는 Velocity EventTask로 연결하고, disconnect 시 동일 connectionId를 무효화한다.

@@ -5,3 +5,4 @@ include 'spring-paper-cache', 'spring-paper-security', 'spring-paper-gradle-plug
 include 'spring-paper-security-core'
 include 'spring-paper-data-pdc'
 include 'spring-paper-data-jdbc'
+include 'spring-paper-velocity'

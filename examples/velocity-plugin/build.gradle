@@ -1,0 +1,26 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.6.0'
+}
+group = 'org.blu3fishez.springpaper.example'
+version = '0.1.0-SNAPSHOT'
+repositories {
+    mavenCentral()
+    maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
+}
+dependencies {
+    implementation 'org.blu3fishez.springpaper:spring-paper-velocity:0.1.0-SNAPSHOT'
+    compileOnly 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
+    annotationProcessor 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
+    compileOnly 'com.google.inject:guice:7.0.0'
+}
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+tasks.named('jar') { archiveClassifier = 'plain' }
+tasks.named('shadowJar') {
+    mergeServiceFiles()
+    filesMatching(['META-INF/services/**', 'META-INF/*.kotlin_module']) {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/INDEX.LIST'
+}
+tasks.named('build') { dependsOn tasks.named('shadowJar') }

@@ -1,5 +1,27 @@
 # 검증 기록 — 2026-11-10
 
+## 2026-11-11 Velocity 호스트 어댑터
+
+`spring-paper-velocity`의 native initialize/shutdown EventTask를 API 호스트에서 실행하는 16개
+자동 테스트가 통과했다. 실제 Spring 컨텍스트·실제 CGLIB/JDK 프록시·ThreadPoolTaskScheduler를
+사용한다. 호스트 객체 identity/종료 소유권, initializer와 생성 시 TCCL/복원, 조건부 입력,
+부분 Spring/native 시작 실패, alias 충돌/대체 소유권, 종료 전 입력 해제, 시작 전·refresh 중·
+native 등록 중 종료, 표준 Scheduled/지연 예약 취소를 검증한다.
+
+security-core 50개와 Paper Security 14개도 통과했다. 추가 회귀는 명시적인 zero pending timeout이
+만료 task를 만들지 않고 1년 뒤에도 미인증 pending을 유지하며 정상 인증·disconnect가 가능한지,
+operation timeout은 계속 적용되는지 확인한다. 기존 기본 120초 정책은 바꾸지 않는다.
+
+명령 정리를 획득한 `CommandMeta` 대신 alias 문자열로 바꾼 복사 소스 mutant에서는 소유권 테스트가
+실패했다. 원본 소스는 수정하지 않고 `build/velocity-verification/ownership-mutation`에 별도
+출력했으며 정상 소스의 전체 Velocity 테스트는 통과했다. 기존 `build/usability-audit`는 보존했다.
+
+새 [Velocity 최소 예제](../examples/velocity-plugin/README.md)의 included build와 shaded JAR을
+확인했다. `velocity-plugin.json`의 native main, Spring 컨텍스트와 Velocity adapter 클래스가
+포함되며 Paper·Velocity API·SLF4J 구현 클래스는 포함되지 않는다. 라이브러리 모듈 build/Javadoc과
+600줄 검사도 통과했다. 실제 Velocity 프로세스·플레이어 접속·OAuth 왕복·운영 배포·재시작은
+수행하지 않았다. 공개 계약과 공식 구현 근거는 [Velocity 문서](velocity.md)에 있다.
+
 현재 예약·실행/유틸·예제 개선 결과는 [사용성 보고서](productivity.md)와
 [기계 판독 검증 기록](productivity-verification.json)에 분리했다.
 

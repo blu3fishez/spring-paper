@@ -89,7 +89,8 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
     /** Open exactly once per transport connection; connection ids must never be reused. */
     public CompletionStage<PaperSecuritySession> open(PaperSecurityRequest request) {
         PaperSecuritySession initial;
-        try { initial = PaperSecuritySession.pending(request.connection(), clock.instant().plus(settings.pendingTimeout())); }
+        try { initial = PaperSecuritySession.pending(request.connection(), settings.pendingTimeout().isZero()
+                ? Instant.MAX : clock.instant().plus(settings.pendingTimeout())); }
         catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
         Managed owner = new Managed(initial);
         Operation operation;
@@ -231,6 +232,7 @@ public final class PaperConnectionSecurityService implements AutoCloseable, Bean
         }
     }
     private void schedulePending(Managed owner) {
+        if (settings.pendingTimeout().isZero()) return;
         var timer = scheduler.schedule(() -> invalidate(owner.connection, PaperSecuritySession.Status.EXPIRED,
                 new TimeoutException("Authentication session expired"), candidate -> candidate == owner
                         && candidate.snapshot.status() == PaperSecuritySession.Status.PENDING), owner.snapshot.expiresAt());

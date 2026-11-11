@@ -5,6 +5,7 @@ ext {
     springDataVersion = '2026.0.2'
     springSecurityVersion = '7.1.2'
     paperVersion = '26.3.build.244-stable'
+    velocityVersion = '4.2.1-SNAPSHOT'
     lombokVersion = '1.18.48'
 }
 
