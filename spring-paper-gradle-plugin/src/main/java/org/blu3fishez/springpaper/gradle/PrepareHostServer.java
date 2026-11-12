@@ -66,10 +66,13 @@ public abstract class PrepareHostServer extends DefaultTask {
     @TaskAction public void prepare() throws IOException {
         var environment = new java.util.LinkedHashMap<>(System.getenv());
         environment.putAll(getLaunchEnvironment().get());
-        var result = NativeLaunchPreparation.prepare(getHost().get(), getArtifact().get().getAsFile().toPath(),
-                getRunDirectory().get().getAsFile().toPath(), getJavaLauncher().get().getExecutablePath().getAsFile().toPath(),
-                environment, NativeLaunchPreparation.springSystemProperties(getLaunchSystemProperties().get()),
-                getJvmArguments().get(), getNativeArguments().get(), getAcceptEula().get(), getServerProperties().get(), getPlanFile().get().getAsFile().toPath());
+        var inputs = new NativeLaunchPreparation.Inputs(getHost().get(), getArtifact().get().getAsFile().toPath(),
+                getRunDirectory().get().getAsFile().toPath(),
+                new NativeLaunchPreparation.Jvm(getJavaLauncher().get().getExecutablePath().getAsFile().toPath(),
+                        environment, NativeLaunchPreparation.springSystemProperties(getLaunchSystemProperties().get()), getJvmArguments().get()),
+                new NativeLaunchPreparation.NativeFiles(getNativeArguments().get(), getAcceptEula().get(), getServerProperties().get()),
+                getPlanFile().get().getAsFile().toPath());
+        var result = NativeLaunchPreparation.prepare(inputs);
         getLogger().lifecycle(result.owned() ? "Native configuration prepared; no host process was started." : "Native configuration is plan-only; existing files are unchanged.");
         getLogger().lifecycle("Review native settings in {}", getProposalFile());
     }

@@ -46,6 +46,10 @@ native cwd는 암묵적으로 검색하지 않으며 external base가 packaged p
 환경 변수·JVM 프로퍼티·명시 location/import는 [공통 설정 계약](configuration.md)을 따른다.
 `application.yml`의 `spring.velocity.server` typed map에서 `velocity.toml`을 준비하며 boolean·정수·list와
 `servers.try` 순서를 보존한다. dotted key에는 `'[island.test]'` 같은 Boot bracket 표기를 쓴다.
+고정 build 43의 알려진 bool/int/list는 `.properties`·환경·`-D`에서도 정규화한다.
+예를 들어 표준 env 이름은 `SPRING_VELOCITY_SERVER_ONLINEMODE`와 `SPRING_VELOCITY_SERVER_SHOWMAXPLAYERS`다.
+알려진 list의 CSV/indexed 값과 typed JSON도 지원하며 MOTD 문자열 `true`를 Boolean으로 추측하지 않는다.
+모르는 새 필드에는 canonical typed YAML/JSON을 사용한다. [타입·우선순위 계약](configuration.md#ordinary-앱의-native-파일-준비)을 따른다.
 
 `prepareVelocityServer`는 기존 forwarding-secret-file 또는 실효 native secret 환경변수를 사용하며
 새/빈 run 디렉터리만 소유한다. hash drift를 감지하고 기존 미소유 파일에는 계획과 민감값을 가린

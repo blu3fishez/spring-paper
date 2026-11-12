@@ -62,6 +62,18 @@ class HostPluginUsageTest {
         assertFalse(Files.exists(directory.resolve("run")));
     }
 
+    @ParameterizedTest @ValueSource(strings = {"paper", "velocity"})
+    void ordinaryApplicationsStillRequireABuildWhenAVersionIsConfigured(String host) throws Exception {
+        fixture(host, true);
+        Files.writeString(directory.resolve("build.gradle"), host.equals("paper")
+                ? "springPaper.development.minecraftVersion = '26.3'\n"
+                : "springVelocity.development.version = '4.2.1-SNAPSHOT'\n", java.nio.file.StandardOpenOption.APPEND);
+        var result = runner(host.equals("paper") ? "runServer" : "runVelocity").buildAndFail();
+        assertTrue(result.getOutput().contains("Native execution requires explicit"), result.getOutput());
+        assertTrue(result.getOutput().contains("no latest version or build is inferred"), result.getOutput());
+        assertFalse(Files.exists(directory.resolve("run")));
+    }
+
     @Test void rejectsTwoHostsInOneGradleProjectAtApplyTime() throws Exception {
         Files.writeString(directory.resolve("settings.gradle"), "rootProject.name='usage'\n");
         Files.writeString(directory.resolve("build.gradle"), "plugins { id 'org.blu3fishez.spring-paper'; id 'org.blu3fishez.spring-velocity' }\n");
@@ -144,6 +156,36 @@ class HostPluginUsageTest {
             assertTrue(result.getOutput().contains("Native Velocity preparation requires @SpringVelocityApplication"), result.getOutput());
             assertFalse(result.getOutput().contains("Pre-start ConfigData loading failed"), result.getOutput());
         }
+        assertFalse(Files.exists(directory.resolve("run")));
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"missing", "zero"})
+    void legacyPaperKeepsTheExistingLatestSelectorWhenBuildIsOmittedOrZero(String build) throws Exception {
+        fixture("paper", false);
+        var writer = new ClassWriter(0);
+        writer.visit(Opcodes.V25, Opcodes.ACC_PUBLIC, "example/Application", null, "java/lang/Object", null);
+        var application = writer.visitAnnotation("Lorg/blu3fishez/springpaper/annotation/SpringPaperPluginApplication;", true);
+        application.visit("name", "LegacyPaper"); application.visitEnd(); writer.visitEnd();
+        Files.write(directory.resolve("classes/example/Application.class"), writer.toByteArray());
+        Files.writeString(Files.createDirectories(directory.resolve("src/main/resources")).resolve("application.yml"), """
+                spring.paper.minecraft:
+                  version: '26.3'
+                  api-coordinate: '26.3.build.244-stable'
+                  api-version: '26.3'
+                %s
+                """.formatted(build.equals("zero") ? "  build: 0" : ""));
+        Files.writeString(directory.resolve("build.gradle"), """
+                tasks.register('inspectLegacySelector') {
+                    inputs.property('selector', tasks.named('runServer').flatMap { it.build }.map { it.class.simpleName }).optional(true)
+                    inputs.property('version', tasks.named('runServer').flatMap { it.version })
+                    doLast {
+                        assert inputs.properties.selector == 'Latest'
+                        assert inputs.properties.version == '26.3'
+                    }
+                }
+                """, java.nio.file.StandardOpenOption.APPEND);
+        runner("inspectLegacySelector").build();
+        assertTrue(runner("inspectLegacySelector").build().getOutput().contains("Reusing configuration cache."));
         assertFalse(Files.exists(directory.resolve("run")));
     }
 

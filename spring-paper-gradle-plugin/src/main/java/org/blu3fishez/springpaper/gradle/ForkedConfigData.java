@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,7 +20,12 @@ final class ForkedConfigData {
     private ForkedConfigData() {}
     static Map<String, Object> read(Path java, Path artifact, Path dataDirectory, Path workingDirectory,
             Map<String, String> environment, Map<String, String> systemProperties, List<String> jvmArgs) throws IOException {
+        return read(java, artifact, dataDirectory, workingDirectory, environment, systemProperties, jvmArgs, Duration.ofSeconds(45));
+    }
+    static Map<String, Object> read(Path java, Path artifact, Path dataDirectory, Path workingDirectory,
+            Map<String, String> environment, Map<String, String> systemProperties, List<String> jvmArgs, Duration timeout) throws IOException {
         Path output = Files.createTempFile("spring-paper-launch-", ".yml");
+        Process child = null;
         try {
             try { Files.setPosixFilePermissions(output, PosixFilePermissions.fromString("rw-------")); }
             catch (UnsupportedOperationException ignored) { }
@@ -30,6 +36,8 @@ final class ForkedConfigData {
             for (String argument : jvmArgs) if (argument.startsWith("-D")) command.add(argument);
             command.addAll(List.of("-cp", artifact.toString(), "org.blu3fishez.springpaper.boot.config.ConfigDataProbe",
                     "--jar", artifact.toString(), "--data-dir", dataDirectory.toString(), "--output", output.toString()));
+            NativeValueTypes.scalarFields().forEach(field -> command.addAll(List.of("--native-field", field)));
+            NativeValueTypes.mapFields().forEach(field -> command.addAll(List.of("--native-map", field)));
             var process = new ProcessBuilder(command);
             Files.createDirectories(workingDirectory);
             process.directory(workingDirectory.toFile());
@@ -40,10 +48,9 @@ final class ForkedConfigData {
             process.redirectError(ProcessBuilder.Redirect.DISCARD);
             int code;
             try {
-                var child = process.start();
-                if (!child.waitFor(45, TimeUnit.SECONDS)) {
-                    child.destroyForcibly();
-                    throw new GradleException("Pre-start ConfigData loading exceeded 45 seconds; no native host was started");
+                child = process.start();
+                if (!child.waitFor(timeout.toNanos(), TimeUnit.NANOSECONDS)) {
+                    throw new GradleException("Pre-start ConfigData loading exceeded " + timeout.toSeconds() + " seconds; no native host was started");
                 }
                 code = child.exitValue();
             }
@@ -58,6 +65,24 @@ final class ForkedConfigData {
                 values.forEach((key, item) -> result.put(key.toString(), item));
                 return result;
             }
-        } finally { Files.deleteIfExists(output); }
+        } finally {
+            try { terminate(child); }
+            finally { if (child == null || !child.isAlive()) Files.deleteIfExists(output); }
+        }
+    }
+    private static void terminate(Process child) {
+        if (child == null) return;
+        boolean interrupted = Thread.interrupted();
+        try {
+            if (!child.isAlive()) return;
+            child.destroyForcibly();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (child.isAlive()) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new GradleException("ConfigData helper termination could not be confirmed within 5 seconds");
+                try { child.waitFor(remaining, TimeUnit.NANOSECONDS); }
+                catch (InterruptedException error) { interrupted = true; }
+            }
+        } finally { if (interrupted) Thread.currentThread().interrupt(); }
     }
 }

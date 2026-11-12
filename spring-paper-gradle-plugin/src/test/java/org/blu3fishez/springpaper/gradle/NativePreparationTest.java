@@ -9,9 +9,50 @@ import java.util.Map;
 import org.gradle.api.GradleException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class NativePreparationTest {
     @TempDir Path directory;
+    static java.util.stream.Stream<List<String>> identicalNativeTargets() {
+        return java.util.stream.Stream.of(
+                List.of("--config=eula.txt"),
+                List.of("--config", "nested/../eula.txt"),
+                List.of("--config", "spigot.yml"),
+                List.of("--config", "config/paper-global.yml"),
+                List.of("--config", "EULA.TXT"),
+                List.of("--config", "nested/../EULA.TXT"),
+                List.of("--config", "SPIGOT.YML"),
+                List.of("--spigot-settings", "config/PAPER-GLOBAL.YML"),
+                List.of("--spigot-settings", "eula.txt"),
+                List.of("--spigot-settings", "config/paper-global.yml"),
+                List.of("--config", "./same.cfg", "--spigot-settings", "nested/../same.cfg"));
+    }
+    @ParameterizedTest @MethodSource("identicalNativeTargets")
+    void identicalNativeTargetsFailBeforeCreatingAnyNativeOrReviewOutput(List<String> args) throws Exception {
+        Path root = directory.resolve("run");
+        Path report = directory.resolve("review/native-plan.txt");
+        var error = assertThrows(GradleException.class, () -> {
+            var plan = NativeConfiguration.paper(root, Map.of("enabled", true), args, false, Map.of("server-port", "25565"));
+            OwnedRunDirectory.materialize(root, "paper", plan, report);
+        });
+        assertTrue(error.getMessage().contains("Native target path collision"), error.getMessage());
+        assertFalse(Files.exists(root));
+        assertFalse(Files.exists(report.getParent()));
+    }
+    @Test void identicalNativeTargetsLeaveAnExistingTreeAndItsSecurityValuesUntouched() throws Exception {
+        Path root = Files.createDirectory(directory.resolve("existing-collision"));
+        Path original = root.resolve("eula.txt");
+        Files.writeString(original, "# user-owned fixture\neula=false\nprivate-password=existing-fixture-value\n");
+        Path report = directory.resolve("existing-review/native-plan.txt");
+        assertThrows(GradleException.class, () -> {
+            var plan = NativeConfiguration.paper(root, Map.of("enabled", true), List.of("--config", "eula.txt"), false, Map.of());
+            OwnedRunDirectory.materialize(root, "paper", plan, report);
+        });
+        assertEquals("# user-owned fixture\neula=false\nprivate-password=existing-fixture-value\n", Files.readString(original));
+        assertFalse(Files.exists(root.resolve(".spring-paper")));
+        assertFalse(Files.exists(report.getParent()));
+    }
     @Test void newOwnedFilesAreDeterministicAndManualDriftNeverGetsOverwritten() throws Exception {
         Path run = directory.resolve("run");
         var plan = NativeConfiguration.paper(run, Map.of("enabled", false), List.of(), false, Map.of("server-port", "25565"));

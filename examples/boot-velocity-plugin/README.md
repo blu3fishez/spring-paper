@@ -17,6 +17,10 @@ Java 25, Velocity 4.2.1-SNAPSHOT build 43, Spring Boot 4.1.2 비웹 예제다.
 
 `application.yml`의 `spring.velocity.server`는 native TOML map이다. boolean·정수·list의 타입과
 `servers.try` 순서를 보존한다. literal dotted key에는 Boot map bracket 표기를 사용한다.
+고정 build 43의 알려진 bool/int/list는 `.properties`·환경·`-D`에서도 같은 타입으로 정규화한다.
+표준 env 이름은 dash를 제거한 `SPRING_VELOCITY_SERVER_ONLINEMODE`, `SPRING_VELOCITY_SERVER_SHOWMAXPLAYERS`이며,
+`SPRING_VELOCITY_SERVER_SERVERS_TRY=lobby,backup`처럼 알려진 list에 CSV도 사용할 수 있다.
+MOTD 문자열 `true`와 미래 필드는 일괄 추측 변환하지 않으며 새 필드에는 canonical typed YAML/JSON을 사용한다.
 
 ```yaml
 spring:

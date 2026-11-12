@@ -37,7 +37,9 @@ public final class SpringPaperPlugin implements Plugin<Project> {
         project.getTasks().named("runServer", RunServer.class).configure(task -> {
             task.dependsOn(shadow);
             task.getVersion().set(version);
-            task.getBuild().set(build.map(DownloadsAPIService.Build.Specific::new));
+            task.getBuild().set(build.filter(value -> value > 0)
+                    .<DownloadsAPIService.Build>map(DownloadsAPIService.Build.Specific::new)
+                    .orElse(DownloadsAPIService.Build.Latest.INSTANCE));
             task.getRunDirectory().set(development.getDirectory());
             task.getJvmArgumentProviders().add(new DevelopmentJvmArguments(development.getJvmArgs()));
             var session = new NativeLaunchSession();

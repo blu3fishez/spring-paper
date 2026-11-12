@@ -67,13 +67,18 @@ Velocity 실행은 `development.version`/`buildNumber`를 별도로 명시한다
 | minecraft.version | 개발 서버 대상 Minecraft 버전, 필수 |
 | minecraft.api-version | plugin.yml API 선언; 생략 시 version |
 | minecraft.api-coordinate | Paper API Maven artifact 버전; 생략 시 `{version}.build.+`. 재현 가능한 빌드에는 명시적으로 고정 |
-| minecraft.build | run-paper 서버 빌드 번호. 생략하면 run-paper의 최신 빌드 선택을 사용하므로 안정 빌드를 확인해 고정 권장 |
+| minecraft.build | 기존 Paper 경로의 run-paper 서버 빌드 번호. 생략/0이면 기존 Latest selector를 유지하므로 안정 빌드를 확인해 고정 권장. ordinary 앱은 실행 build 명시 필요 |
 | minecraft.java-version | 소비 플러그인 컴파일·개발 서버 JDK, 기본 25 |
 | development.directory | 개발 서버 작업 디렉터리, 기본 run |
 | development.accept-eula | 사용자가 수락한 EULA 여부, 기본 false |
 | development.jvm-args | Java 실행 인자 목록 |
 | development.server-properties | server.properties에 합칠 키와 값. 다른 기존 키는 유지 |
 | lifecycle.shutdown-timeout-seconds | 기본 worker executor 종료 대기, 기본 5초. 사용자 flush의 별도 대기 정책을 대신하지 않음 |
+
+기존 Paper carrier의 준비 작업은 기존 `server.properties` overlay와 `eula.txt` 기록을 유지한다.
+아래 owned 디렉터리·drift·plan-only 정책은 ordinary 앱의 준비 경로에 적용한다.
+
+## Ordinary 앱의 native 파일 준비
 
 `preparePaperServer`/`prepareVelocityServer`는 새/빈 run 디렉터리에만 native 파일 전체와
 `.spring-paper/owned.properties` hash를 생성한다. 반복 준비는 멱등이며 수동 drift는 충돌이다.
@@ -92,6 +97,16 @@ JAR·descriptor·계획·로그에는 raw secret을 기록하지 않는다. 기�
 파일 대신 이미 제공한 실효 native secret 환경변수도 사용할 수 있으며 새 secret을 만들지 않는다.
 secret 자동 생성/회전·기존 proxy 원격 등록은 수행하지 않는다. 주소·modern forwarding·online-mode·
 공유 파일의 일치는 proxy 소유자가 준비한다. [상세 예제](../examples/boot-paper-plugin/README.md)를 따른다.
+
+고정 Velocity build 43의 알려진 native bool/int/list는 YAML뿐 아니라 `.properties`·환경 변수·`-D`에서도
+같은 타입으로 정규화한다. 원본 Boot Binder가 우선순위와 canonical field/map을 선택하고,
+native schema adapter가 타입을 검증한다. 표준 환경 변수 이름은 dash를 제거한다.
+예: `SPRING_VELOCITY_SERVER_ONLINEMODE=false`, `SPRING_VELOCITY_SERVER_SHOWMAXPLAYERS=500`,
+`SPRING_VELOCITY_SERVER_SERVERS_TRY=lobby,backup`. list는 알려진 필드에서 CSV나 indexed 값을 사용할 수 있다.
+MOTD의 문자열 `true`, 숫자처럼 생긴 문자열·주소·literal key는 일괄 추측 변환하지 않는다.
+새 필드에는 canonical YAML/JSON과 명시적인 타입을 사용한다. 잘못된 알려진 값은 값을 숨기고 field를 진단한다.
+artifact-only helper는 기존 JSON source의 두 native prefix만 typed primitive로 복원하며 source 위치·Origin과
+ConfigData 순서를 유지한다. JSON 문자열과 literal key의 Unicode codepoint도 YAML wire에서 보존한다.
 
 코어 워커는 사용자 stop 이후, DB·캐시 등 컨텍스트 인프라를 닫기 전에 새 제출을 차단하고 실행 중 작업을 기다린다. 컨텍스트 destruction은 시작 실패 정리를 위한 idempotent fallback으로도 close를 호출할 수 있다. 대기 시간이 지나면 워커를 interrupt하고 경고를 남기며, 실제 종료를 무한 대기하거나 저장 완료를 보장하지 않는다. 사용자 flush·멱등 재시도·내구성 정책은 각 기능이 유지한다.
 

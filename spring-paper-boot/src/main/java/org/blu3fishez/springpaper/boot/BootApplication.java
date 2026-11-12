@@ -8,6 +8,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.context.logging.LoggingApplicationListener;
 import org.springframework.boot.support.EnvironmentPostProcessorApplicationListener;
+import org.springframework.beans.factory.support.BeanNameGenerator;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -17,6 +18,7 @@ import org.springframework.core.io.ResourceLoader;
 public final class BootApplication extends SpringApplication {
     private final ClassLoader nativeClassLoader;
     private final Hooks hooks;
+    private BeanNameGenerator beanNameGenerator;
 
     /** Host work belongs to these callbacks; ordinary bean creation and Boot events remain on the caller. */
     public record Hooks(Consumer<AnnotationConfigApplicationContext> initialize,
@@ -68,9 +70,21 @@ public final class BootApplication extends SpringApplication {
     }
 
     @Override protected void postProcessApplicationContext(ConfigurableApplicationContext context) {
-        super.postProcessApplicationContext(context);
+        // Boot configures its source loader separately from this context's register/scan readers.
+        // The context setter also registers Boot's shared generator singleton, so it owns that one
+        // registration; leave every other part of Boot's context preparation unchanged.
+        BeanNameGenerator generator = beanNameGenerator;
+        if (generator != null) super.setBeanNameGenerator(null);
+        try { super.postProcessApplicationContext(context); }
+        finally { if (generator != null) super.setBeanNameGenerator(generator); }
+        if (generator != null) ((AnnotationConfigApplicationContext) context).setBeanNameGenerator(generator);
         // Resource fallback loaders must never become the proxy/bean definition class loader.
         context.setClassLoader(nativeClassLoader);
+    }
+
+    @Override public void setBeanNameGenerator(BeanNameGenerator generator) {
+        super.setBeanNameGenerator(generator);
+        beanNameGenerator = generator;
     }
 
     @Override protected void applyInitializers(ConfigurableApplicationContext context) {

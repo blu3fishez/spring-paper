@@ -7,6 +7,8 @@ dependencies {
     // Matches Velocity 4.2.1 build 43 (git 9a5951c7); build tooling only.
     implementation 'com.electronwill.night-config:toml:3.9.0'
     testImplementation gradleTestKit()
+    // Exercise the existing product ConfigData helper; no Boot dependency is added to plugin runtime.
+    testImplementation project(':spring-paper-boot')
 }
 gradlePlugin {
     plugins {

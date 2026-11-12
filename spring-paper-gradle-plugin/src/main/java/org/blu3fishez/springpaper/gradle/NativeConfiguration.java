@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import org.gradle.api.GradleException;
@@ -16,10 +17,16 @@ import org.yaml.snakeyaml.Yaml;
 /** Converts resolved launch settings into complete tool-owned native configuration files. */
 final class NativeConfiguration {
     record Plan(Map<Path, String> files, Path secretSource, String secretVariable, boolean requiresSecret) {}
+    private record PaperTargets(Path server, Path eula, Path spigot, Path global) {}
     private NativeConfiguration() {}
     static Plan paper(Path root, Map<String, Object> velocity, List<String> args, boolean acceptEula, Map<String, String> serverProperties) {
-        boolean enabled = bool(velocity.getOrDefault("enabled", false), "spring.paper.velocity.enabled");
+        return paper(root, velocity, args, acceptEula, serverProperties, NativeValueTypes.Projection.EMPTY);
+    }
+    static Plan paper(Path root, Map<String, Object> velocity, List<String> args, boolean acceptEula, Map<String, String> serverProperties, NativeValueTypes.Projection projection) {
         Map<String, String> cli = paperArguments(args);
+        PaperTargets targets = paperTargets(root, cli);
+        velocity = NativeValueTypes.paper(velocity, projection);
+        boolean enabled = bool(velocity.getOrDefault("enabled", false), "spring.paper.velocity.enabled");
         Map<String, String> properties = new TreeMap<>(serverProperties);
         if (enabled) {
             if (properties.containsKey("online-mode") && !properties.get("online-mode").equalsIgnoreCase("false")) {
@@ -33,21 +40,40 @@ final class NativeConfiguration {
         Map<Path, String> files = new LinkedHashMap<>();
         StringBuilder content = new StringBuilder("# Spring Paper development server\n");
         properties.forEach((key, value) -> content.append(OwnedRunDirectory.property(key)).append('=').append(OwnedRunDirectory.property(value)).append('\n'));
-        files.put(path(root, cli.getOrDefault("config", "server.properties")), content.toString());
-        files.put(root.resolve("eula.txt"), "# https://aka.ms/MinecraftEULA\neula=" + acceptEula + "\n");
-        files.put(path(root, cli.getOrDefault("spigot-settings", "spigot.yml")), yaml(Map.of("settings", Map.of("bungeecord", false))));
+        files.put(targets.server(), content.toString());
+        files.put(targets.eula(), "# https://aka.ms/MinecraftEULA\neula=" + acceptEula + "\n");
+        files.put(targets.spigot(), yaml(Map.of("settings", Map.of("bungeecord", false))));
         Map<String, Object> forwarding = new LinkedHashMap<>();
         forwarding.put("enabled", enabled);
         forwarding.put("online-mode", bool(velocity.getOrDefault("online-mode", true), "spring.paper.velocity.online-mode"));
         // Native PAPER_VELOCITY_SECRET overrides this empty value in the launcher-owned child process.
         forwarding.put("secret", "");
-        files.put(path(root, cli.getOrDefault("paper-settings-directory", "config")).resolve("paper-global.yml"),
+        files.put(targets.global(),
                 yaml(Map.of("proxies", Map.of("velocity", forwarding))));
         if (velocity.containsKey("secret")) throw new GradleException("Use spring.paper.velocity.secret-file; inline forwarding secrets are not supported");
         Object secret = velocity.get("secret-file");
         return new Plan(files, enabled && secret != null ? path(root, secret.toString()) : null, "PAPER_VELOCITY_SECRET", enabled);
     }
+    static void validatePaperTargets(Path root, List<String> args) { paperTargets(root, paperArguments(args)); }
+    private static PaperTargets paperTargets(Path root, Map<String, String> cli) {
+        Path server = path(root, cli.getOrDefault("config", "server.properties"));
+        Path eula = path(root, "eula.txt");
+        Path spigot = path(root, cli.getOrDefault("spigot-settings", "spigot.yml"));
+        Path global = path(root, cli.getOrDefault("paper-settings-directory", "config")).resolve("paper-global.yml");
+        Map<String, String> seen = new LinkedHashMap<>();
+        for (var target : List.of(Map.entry("server properties (--config)", server), Map.entry("EULA", eula),
+                Map.entry("Spigot settings (--spigot-settings)", spigot), Map.entry("Paper global settings (--paper-settings-directory)", global))) {
+            // Refuse case-only aliases conservatively, without probing or creating files in the run tree.
+            String previous = seen.putIfAbsent(target.getValue().toString().toLowerCase(Locale.ROOT), target.getKey());
+            if (previous != null) throw new GradleException("Native target path collision: " + previous + " and " + target.getKey() + " select the same or a case-aliased path: " + target.getValue());
+        }
+        return new PaperTargets(server, eula, spigot, global);
+    }
     static Plan velocity(Path root, Map<String, Object> settings) {
+        return velocity(root, settings, NativeValueTypes.Projection.EMPTY);
+    }
+    static Plan velocity(Path root, Map<String, Object> settings, NativeValueTypes.Projection projection) {
+        settings = NativeValueTypes.velocity(settings, projection);
         if (settings.containsKey("forwarding-secret")) throw new GradleException("Use spring.velocity.server.forwarding-secret-file; inline forwarding secrets are not supported");
         Map<String, Object> values = new LinkedHashMap<>(settings);
         values.putIfAbsent("config-version", "2.9");

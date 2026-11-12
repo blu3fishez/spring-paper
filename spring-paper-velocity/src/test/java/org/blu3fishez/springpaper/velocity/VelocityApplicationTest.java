@@ -7,11 +7,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.blu3fishez.springpaper.velocity.bootstrap.VelocityHostConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigUtils;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.context.annotation.Import;
 
 class VelocityApplicationTest {
@@ -65,6 +70,32 @@ class VelocityApplicationTest {
         assertEquals("Velocity application initialization already failed", repeated.getMessage());
         VelocityHost.execute(application.shutdown());
         verifyNoInteractions(host.events, host.commands);
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"register", "scan"})
+    void legacyInitializersKeepFullyQualifiedNamesForContextRegistrationAndScanning(String discovery) {
+        var host = new VelocityHost();
+        var captured = new AtomicReference<AnnotationConfigApplicationContext>();
+        Class<?> first = org.blu3fishez.springpaper.velocity.fixture.naming.first.Shared.class;
+        Class<?> second = org.blu3fishez.springpaper.velocity.fixture.naming.second.Shared.class;
+        var application = host.application(HostConfiguration.class, context -> {
+            var annotationContext = (AnnotationConfigApplicationContext) context;
+            captured.set(annotationContext);
+            if (discovery.equals("register")) annotationContext.register(first, second);
+            else annotationContext.scan(first.getPackageName(), second.getPackageName());
+        });
+        try {
+            VelocityHost.execute(application.initialize());
+            assertTrue(application.isReady());
+            var context = captured.get();
+            for (Class<?> type : new Class<?>[] { first, second, HostConfiguration.class }) {
+                assertArrayEquals(new String[] { type.getName() }, context.getBeanNamesForType(type));
+                assertSame(context.getBean(type), context.getBean(type.getName()));
+            }
+            assertFalse(context.containsBean("shared"));
+            assertSame(FullyQualifiedAnnotationBeanNameGenerator.INSTANCE,
+                    context.getBean(AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR));
+        } finally { VelocityHost.execute(application.shutdown()); }
     }
 
     @Test void hostNamesCannotBeReplacedByConsumerDefinitions() {

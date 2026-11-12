@@ -325,7 +325,7 @@ included build 없는 기존 guide·ordinary Paper·ordinary Velocity 소비 프
 두 플러그인 marker, Boot 전이 의존성·비웹 그래프, 설정 캐시 재사용, Boot metadata 병합,
 현재 라이브러리 bytecode와 호스트 API 제외를 확인한다. `~/.m2`와 외부 저장소에는 게시하지 않는다.
 
-예제는 included build로 현재 소스를 사용한다. `preparePaperServer`/`prepareVelocityServer`는 새 owned
+예제는 included build로 현재 소스를 사용한다. ordinary 앱의 `preparePaperServer`/`prepareVelocityServer`는 새 owned
 run 디렉터리에 native 설정과 hash를 기록하고 수동 변경을 감지한다. 기존 미소유 파일은 계획만 출력한다.
 Paper의 `runServer`, Velocity의 `runVelocity`는 각각 지정한 host build와 자기 JAR을 사용한다.
 실제 host 실행과 EULA 수락은 현재 전환 검증에 포함하지 않았다. EULA 기본값은 false다.

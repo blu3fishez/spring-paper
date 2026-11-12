@@ -373,6 +373,7 @@ run task를 제공하는 구현과 실제 host 프로세스 실행은 구별하�
 ## 11. 제품 구현과 검증 현황
 
 아래 결과는 저장소의 제품 소스와 실제 소비자 산출물에 대한 검증이며 §9의 임시 prototype proof와 구별한다.
+이 절의 수치·산출물은 a7 snapshot이며, 리뷰 보완 뒤 최종 통합 결과는 §12 마지막에 기록한다.
 공용 bootstrap은 `WebApplicationType.NONE`, native 소유 종료, Boot logging/shutdown-hook 전역 소유 방지를 강제한다.
 Servlet API·Spring Web·웹 컨테이너 runtime 의존성은 금지한다. 허용한 Boot core 자체의 미활성
 Servlet/reactive adapter 클래스는 포함되며, 독립 소비자 검증에서 원본 4.1.2 core의 bytecode와 비교한다.
@@ -399,16 +400,93 @@ ordinary root는 Spring이 만들며, native bridge만 Guice가 만든다. 동�
 새 root quick start는 [Paper](../examples/boot-paper-plugin/README.md), [Velocity](../examples/boot-velocity-plugin/README.md),
 설정 순서·기존 경로는 [설정 계약](configuration.md)에 있다.
 
-2026-11-13 최종 `./gradlew build`는 PASS했다. 최신 JUnit XML 합계는 **333개, 실패/오류/skip 0**이다
+`a7a8b45` snapshot의 2026-11-13 `./gradlew build`는 PASS했다. 당시 JUnit XML 합계는 **333개, 실패/오류/skip 0**이다
 (Boot 6, Paper core 133, Velocity 21, 선택 5모듈 81, config 4, security-core 50, Gradle plugin 38).
 마지막 root 실행은 configuration cache를 재사용했고 111 task 중 12개 실행·99개 up-to-date였다.
 테스트 task는 모두 담당별 최신 정상 결과를 up-to-date로 재사용했으며 333개를 새로 실행한 결과는 아니다.
 비웹 그래프 gate와 source size 검사는 이 마지막 실행에서 수행했고 Javadoc/plugin validation도 통과했다.
-로그·집계는 `build/boot-final-root-build.log`, `build/boot-final-root-verification.json`,
-`build/published-consumer-verification.json`, `build/final-example-artifact-verification.json`에 있다.
+당시 로그·집계는 `build/verification-a7-review-snapshot/`의 `boot-final-root-build.log`,
+`boot-final-root-verification.json`, `published-consumer-verification.json`,
+`final-example-artifact-verification.json`에 보존했다.
 controlled native loader의 재현 명령·소스/산출물 hash·stdout/stderr는
 `build/velocity-verification/boot-application-final-20261113/report.json`과 같은 디렉터리에 보존했다.
 
 현재 전환에서 실제 Paper/Velocity 프로세스 기동, EULA 수락, client 접속/forwarding, 운영 파일 apply,
 원격 proxy 등록·secret 자동 생성/회전은 수행하지 않는다. §9의 scratch proof나 이전 host 실행 기록은
 이 미실행 범위의 제품 검증을 대신하지 않는다.
+
+## 12. 독립 리뷰와 후속 보완
+
+아래 두 리뷰는 `36cad9f2fe1f3b9c59f5d1ccbfc673c1886d63bc...a7a8b45dfe991ee9742675aa0c3b369d50012216`
+diff를 독립적으로 검토한 결과다. source/spec 줄번호는 **a7 snapshot 기준**이며 보완 뒤 줄번호와 다를 수 있다.
+§11의 333개 정상 결과는 이 snapshot의 기록이다. 후속 source의 검증을 같은 결과로 대체하지 않는다.
+
+### Standards
+
+명문화한 표준 위반은 0건이다. 이 축의 원문 finding은 정확성 P2 1건과 judgement P3 1건이며
+총 2건·최악 P2다. 아래 judgement는 문서화된 표준의 강제 위반이나 실제 동작 오류를 뜻하지 않는다.
+
+| 원문 finding | 수정·재검증 상태 |
+|---|---|
+| P2 correctness — `ForkedConfigData.java:50`: `waitFor`의 InterruptedException에서 helper JVM을 종료하지 않는다. 호출자 대기는 끝나도 child와 임시 출력 writer가 남을 수 있다. interruption/timeout 모두 종료 요청과 bounded 종료 대기, caller interrupt 보존 회귀가 필요하다. | 해소 확인. 모든 반환·예외의 finally에서 최대 5초 종료 대기와 interrupt 복원을 수행하고 종료 뒤 private output을 삭제한다. interruption/timeout·정상/비정상 exit·missing/malformed output의 실제 child PID 회귀 6개 PASS. focused Standards 검토도 해소와 새 구체적 회귀 없음을 확인했다. |
+| P3 judgement — possible Data Clumps: `NativeLaunchPreparation.java:37`의 11개 prepare 인자가 standalone/run 두 곳을 함께 이동하며 같은 Map/List 타입의 역할을 인자 순서로 구별한다. 내부 실행 입력 record를 권장했다. | 해소 확인. 내부 Jvm/NativeFiles/Inputs record로 양 호출부를 일관되게 정리하고 문자열 출력은 민감 설정을 가린다. 공개 DSL/metadata는 바꾸지 않았다. focused Standards 검토에서 수용했다. |
+
+### Spec
+
+missing/partial 요구는 0건이며 원문 finding은 P2 3건·최악 P2다.
+합의하지 않은 기존 기본값 변경과 구현이 계약을 보존하지 못한 사례를 아래와 같이 구별한다.
+
+| 원문 finding와 사양 근거 | 수정·재검증 상태 |
+|---|---|
+| P2 — Paper legacy 기본값 제거: spec `:122`의 “명시 DSL → legacy YAML → 기존 기본값”과 달리 `RunHostPreparation.java:35`가 mode 구분 없이 양수 Specific build를 요구한다. 기존 run-task 3.0.2의 Latest 기본을 legacy에서 제거하는 합의는 없었다. | 해소 확인. legacy 생략/0의 기존 Latest selector를 복원했다. ordinary 양 host의 명시 build 요구는 유지한다. selector와 local Java fixture로 검증했으며 실제 latest 다운로드나 host 실행은 하지 않았다. focused Spec probe에서도 통과했다. |
+| P2 — 동일 native CLI path: spec `:302`는 override의 실제 경로·값을 반영한다. `NativeConfiguration.java:36`의 Map 삽입이 같은 경로의 앞 값을 덮는다. `--config=eula.txt`와 backend=true에서 owned=true·파일 3개가 되며 server 설정이 `eula=false`로 바뀌어 online-mode=false를 잃는다. | 해소 확인. 동일/정규화 동일·대소문자 별칭을 삽입 전 거절하며 helper 실행·원본 변경 전에 검증한다. path 충돌과 준비 차단 회귀 및 focused Spec probe가 통과했다. |
+| P2 — Velocity legacy initializer 명명: spec `:237`/`:364`는 기존 initializers를 보존한다. `SpringVelocityApplication.java:96`의 application generator만으로 context의 reader/scanner에 기존 FQ 명명 정책이 적용되지 않는다. 서로 다른 패키지의 두 Shared component를 initializer에서 context.register하면 BeanDefinitionOverrideException이 발생한다. | 해소 확인. context reader/scanner와 Boot source-loader가 같은 generator를 사용하고 내부 singleton은 한 번 등록한다. register/scan 두 실패 재현과 root FQ 이름·Paper 이름 보존이 통과했다. Boot 6/core 133/Velocity 23 및 독립 Spec probe PASS. |
+
+원문 리뷰의 상태는 **Standards 2건·최악 P2·미해결 0**, **Spec 3건·최악 P2·미해결 0**이다.
+두 축의 finding을 합치거나 축 사이의 순위를 만들지 않는다.
+
+### 후속 실소비 검증
+
+위 보완 뒤 root build는 JUnit XML **359개, 실패/오류/skip 0**으로 통과했다
+(Gradle plugin 62, Velocity 23). 당시 root 실행은 48 task 실행·63 up-to-date와 configuration cache 재사용이며,
+선택 5모듈 81개는 실행하고 나머지 278개는 담당별 최신 정상 결과를 재사용했다.
+독립 Maven 3소비자도 빌드·metadata/bytecode·비웹 gate와 두 번째 cache 재사용을 통과했다.
+
+이후 실제 Velocity prepare에서 `.properties`의 online-mode=true가 generic Object map의 문자열로 남아
+TOML의 `online-mode = "true"`가 되는 추가 문제를 발견했다. 같은 상대 location/import/profile의 typed YAML은
+Boolean true와 list 순서를 보존했다. 채택한 ConfigData/profile/env/import 계약에 따라 `.properties`·환경·`-D`의
+native bool/int/list도 보존하도록 고정 Velocity schema의 알려진 필드만 정규화했다.
+motd="true" 같은 유효 문자열을 일괄 추측 변환하지 않는다. 이 보완 전 359개 결과와 최종 결과를 구별한다.
+같은 검증에서 artifact-only Boot 기본 JSON parser의 unknown Boolean이 String으로 바뀌는 경계도
+확인했다. 기존 JSON source의 두 native prefix만 typed primitive로 복원하고 source 위치·Origin·다른 namespace와
+ConfigData 순서를 유지했다. 새 JSON library나 runtime 전역 EPP는 추가하지 않았다.
+그 뒤 추가 integration Spec 검토에서 원문 3건과 별개의 P2를 발견했다. quoted JSON의 raw NEL(U+0085)을
+YAML node 값으로 읽으면 공백으로 folding해 문자열·literal key의 codepoint를 바꾼다.
+검증된 원문 JSON literal을 JSON escape 규칙으로 decode하고 helper YAML wire에서도 Unicode escape를
+사용하도록 보완했다. common 23개와 Gradle plugin 86개 검증에서 NEL/LS/PS/emoji·escaped control·NUL 및 literal key의
+helper→Safe YAML String→실제 TOML/proposal codepoint 보존을 확인했다. focused Spec 검토도 원래 probe로 해소를 확인했고
+새 구체적 회귀를 찾지 못했다. 이 추가 P2는 a7의 원문 Standards 2건/Spec 3건과 별도로 해소했다.
+이 발견 전 390개 root·3소비자·실제6케이스·native loader 결과는 해당 snapshot의 결과로 따로 보존한다.
+실제 host/EULA/client network/운영 파일 apply·원격 등록·secret 생성 금지는 유지한다.
+
+### 최종 통합 검증
+
+마지막 source freeze와 focused Spec 해소 확인 뒤 `./gradlew build`를 한 번 실행해 PASS했다.
+최신 JUnit XML은 **400개, 실패/오류/skip 0**이다: common Boot 23, Paper core 133, Velocity 23,
+선택 5모듈 81, config 4, security-core 50, Gradle plugin 86.
+이 실행에서는 Paper core/Velocity/선택 5모듈의 237개를 실행하고 163개는 담당별 최신 정상 결과를
+up-to-date로 재사용했다. configuration cache를 재사용했으며 111 task 중 36개 실행·75개 up-to-date였다.
+source size·모든 runtime 비웹 gate를 실행했고 Javadoc/plugin validation도 통과했다.
+
+| 최종 검증 | 결과 |
+|---|---|
+| 독립 Maven 소비 3개 | local verification 저장소만 사용. guide/Paper/Velocity의 현재 library bytecode 174/86/22개, metadata/Boot imports/factories 병합·flat JAR·API/tooling 제외와 각각 두 번째 configuration cache 재사용 PASS. |
+| 실제 예제 2개 | 각 resolved runtime graph gate와 최종 JAR 검사 PASS. Boot는 core+autoconfigure 4.1.2뿐이며 원본 Boot core adapter 53개의 bytecode 출처도 일치한다. |
+| 실제 ConfigData 소비 6개 | Paper 정상경로, Velocity properties/env/-D/JSON, invalid field 거절 PASS. 상대 location/import/profile, bool/int/list·MOTD 문자열·JSON future primitive·raw NEL/LS/PS/emoji와 literal Unicode key를 보존했다. 정상 5케이스는 두 번째 cache 재사용도 확인했다. |
+| 최종 native loader | 최종 Velocity JAR와 기존 고정 build 43의 실제 JSON loader/classloader/Guice/Boot 경로·두 loader 격리·ready/shutdown PASS. controlled binding과 직접 EventTask 호출이며 실제 proxy process/dispatch/client 검증은 아니다. |
+
+최종 근거는 `build/boot-unicode-final-root-verification.json`, `build/published-consumer-verification.json`,
+`build/unicode-final-example-artifact-verification.json`, `build/native-type-consumer-results.json`,
+`build/velocity-verification/boot-application-unicode-final-20261113/report.json`에 있다.
+원문 리뷰는 **Standards 2건·최악 P2·미해결 0**, **Spec 3건·최악 P2·미해결 0**이며,
+추가 typed integration과 quoted-text P2도 별도 해소·실제 소비 재검증을 완료했다.

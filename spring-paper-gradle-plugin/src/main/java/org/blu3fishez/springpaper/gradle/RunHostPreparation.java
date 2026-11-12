@@ -32,11 +32,6 @@ final class RunHostPreparation implements Action<Task>, Serializable {
     }
     @Override public void execute(Task value) {
         AbstractRun task = (AbstractRun) value;
-        if (task.getRunClasspath().isEmpty() && (!task.getVersion().isPresent() || task.getVersion().get().isBlank()
-                || !(task.getBuild().getOrNull() instanceof DownloadsAPIService.Build.Specific build) || build.getBuildNumber() <= 0)) {
-            String setting = host.equals("paper") ? "springPaper.development.minecraftVersion and build" : "springVelocity.development.version and buildNumber";
-            throw new GradleException("Native execution requires explicit " + setting + "; no latest version or build is inferred");
-        }
         Path jar = artifact.get().getAsFile().toPath();
         Path plan = planFile.get().getAsFile().toPath();
         Map<String, String> environment = new LinkedHashMap<>();
@@ -47,9 +42,17 @@ final class RunHostPreparation implements Action<Task>, Serializable {
         List<String> jvm = new java.util.ArrayList<>(task.getJvmArgs());
         for (var provider : task.getJvmArgumentProviders()) provider.asArguments().forEach(jvm::add);
         try {
-            var result = NativeLaunchPreparation.prepare(host, jar, task.getRunDirectory().get().getAsFile().toPath(),
-                    task.getJavaLauncher().get().getExecutablePath().getAsFile().toPath(), environment, systemProperties,
-                    jvm, task.getArgs() == null ? List.of() : task.getArgs(), acceptEula.get(), serverProperties.get(), plan);
+            boolean legacyPaper = host.equals("paper") && NativeLaunchPreparation.isLegacyPaper(jar);
+            if (task.getRunClasspath().isEmpty() && (!task.getVersion().isPresent() || task.getVersion().get().isBlank()
+                    || (!legacyPaper && (!(task.getBuild().getOrNull() instanceof DownloadsAPIService.Build.Specific build) || build.getBuildNumber() <= 0)))) {
+                String setting = host.equals("paper") ? "springPaper.development.minecraftVersion" + (legacyPaper ? " (or legacy minecraft.version)" : " and build")
+                        : "springVelocity.development.version and buildNumber";
+                throw new GradleException("Native execution requires explicit " + setting + (legacyPaper ? "; the existing run-paper build selector is preserved" : "; no latest version or build is inferred"));
+            }
+            var inputs = new NativeLaunchPreparation.Inputs(host, jar, task.getRunDirectory().get().getAsFile().toPath(),
+                    new NativeLaunchPreparation.Jvm(task.getJavaLauncher().get().getExecutablePath().getAsFile().toPath(), environment, systemProperties, jvm),
+                    new NativeLaunchPreparation.NativeFiles(task.getArgs() == null ? List.of() : task.getArgs(), acceptEula.get(), serverProperties.get()), plan);
+            var result = NativeLaunchPreparation.prepare(inputs);
             if (!result.owned()) throw new GradleException("Native launch blocked: run directory or effective CLI target is unmanaged and preparation is plan-only. Review " + plan);
             Path root = task.getRunDirectory().get().getAsFile().toPath();
             if (java.nio.file.Files.exists(root.resolve(".spring-paper/owned.properties"))) session.snapshot = OwnedRunDirectory.snapshot(root, host);
