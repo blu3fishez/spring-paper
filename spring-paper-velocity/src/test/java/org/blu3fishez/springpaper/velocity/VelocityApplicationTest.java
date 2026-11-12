@@ -61,6 +61,8 @@ class VelocityApplicationTest {
         assertSame(expected, assertThrows(IllegalArgumentException.class, () -> VelocityHost.execute(application.initialize())));
         assertSame(original, Thread.currentThread().getContextClassLoader());
         assertFalse(application.isReady());
+        var repeated = assertThrows(IllegalStateException.class, () -> VelocityHost.execute(application.initialize()));
+        assertEquals("Velocity application initialization already failed", repeated.getMessage());
         VelocityHost.execute(application.shutdown());
         verifyNoInteractions(host.events, host.commands);
     }

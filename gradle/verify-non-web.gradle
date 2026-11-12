@@ -1,0 +1,129 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.TaskAction
+
+/** Checks module identities, rather than filenames or the host's compileOnly API. */
+abstract class VerifyNonWebRuntime extends DefaultTask {
+    @Input
+    abstract ListProperty<String> getResolvedModules()
+
+    @Input
+    abstract ListProperty<String> getResolutionFailures()
+
+    @Input
+    abstract Property<String> getClasspathName()
+
+    static Map<String, List<String>> inspect(ResolvedComponentResult root) {
+        def modules = new TreeSet<String>()
+        def failures = new TreeSet<String>()
+        def visited = new HashSet<>()
+        def pending = new ArrayDeque<ResolvedComponentResult>()
+        pending.add(root)
+        while (!pending.empty) {
+            def component = pending.removeFirst()
+            if (!visited.add(component.id)) continue
+            if (component.id instanceof ModuleComponentIdentifier) {
+                def id = (ModuleComponentIdentifier) component.id
+                modules.add("${id.group}:${id.module}:${id.version}".toString())
+            }
+            component.dependencies.each { dependency ->
+                if (dependency instanceof ResolvedDependencyResult) {
+                    pending.add(dependency.selected)
+                } else if (dependency instanceof UnresolvedDependencyResult) {
+                    failures.add("${dependency.attempted.displayName}: ${dependency.failure.message}".toString())
+                }
+            }
+        }
+        return [modules: modules.toList(), failures: failures.toList()]
+    }
+
+    private static boolean inGroup(String group, String family) {
+        return group == family || group.startsWith(family + '.')
+    }
+
+    private static String forbiddenReason(String group, String module) {
+        if (group == 'org.springframework' && module in ['spring-web', 'spring-webmvc', 'spring-webflux']) {
+            return 'Spring Framework web module'
+        }
+        if (group == 'org.springframework.boot' && module.startsWith('spring-boot-')) {
+            def feature = module.substring('spring-boot-'.length()).replaceFirst('^starter-', '')
+            def webFeatures = ['servlet', 'tomcat', 'jetty', 'undertow', 'reactor-netty', 'jersey']
+            // These exact Boot 4 modules depend on spring-web (directly or via http-client).
+            // Source: spring-projects/spring-boot, tag v4.1.2, module/<module>/build.gradle.
+            // This is not a ban on ordinary HTTP/REST clients or on names containing "http".
+            def springWebModules = ['spring-boot-http-client', 'spring-boot-http-codec',
+                                    'spring-boot-http-converter', 'spring-boot-restclient']
+            if (feature.startsWith('web') || webFeatures.any { feature == it || feature.startsWith(it + '-') }
+                    || module in springWebModules) {
+                return 'Spring Boot web module or starter'
+            }
+        }
+        if (inGroup(group, 'jakarta.servlet') || inGroup(group, 'javax.servlet')
+                || inGroup(group, 'org.jboss.spec.javax.servlet')
+                || (group == 'org.apache.geronimo.specs' && module.startsWith('geronimo-servlet_'))) {
+            return 'Servlet API or implementation'
+        }
+        if (inGroup(group, 'org.apache.tomcat')) return 'Tomcat web server'
+        if (inGroup(group, 'org.eclipse.jetty') || inGroup(group, 'org.mortbay.jetty')) return 'Jetty web server'
+        if (inGroup(group, 'io.undertow')) return 'Undertow web server'
+        if (inGroup(group, 'io.projectreactor.netty')
+                || (group == 'io.projectreactor.ipc' && module == 'reactor-netty')) {
+            return 'Reactor Netty web stack'
+        }
+        // io.netty transports/codecs and ordinary HTTP clients are not web servers.
+        return null
+    }
+
+    @TaskAction
+    void verifyRuntime() {
+        if (!resolutionFailures.get().empty) {
+            throw new GradleException("Cannot verify ${classpathName.get()}; runtime dependencies did not resolve:\n"
+                    + resolutionFailures.get().collect { "  - ${it}" }.join('\n'))
+        }
+        def forbidden = resolvedModules.get().collect { coordinate ->
+            def parts = coordinate.split(':', 3)
+            def reason = VerifyNonWebRuntime.forbiddenReason(parts[0], parts[1])
+            return reason == null ? null : "  - ${coordinate} (${reason})"
+        }.findAll { it != null }
+        if (!forbidden.empty) {
+            throw new GradleException("${classpathName.get()} violates the non-web application runtime boundary:\n"
+                    + forbidden.join('\n'))
+        }
+    }
+}
+
+def runtimeChecks = tasks.register('verifyNonWebRuntime', VerifyNonWebRuntime) {
+    group = 'verification'
+    description = 'Rejects web stacks in the resolved runtime classpaths of application and library modules.'
+    classpathName.convention(':runtimeClasspath')
+    resolvedModules.convention([])
+    resolutionFailures.convention([])
+}
+
+allprojects { candidate ->
+    candidate.pluginManager.withPlugin('java') {
+        // Wait until all plugins are known: a Gradle plugin's implementation is tooling, not application runtime.
+        candidate.afterEvaluate {
+            if (!candidate.pluginManager.hasPlugin('java-gradle-plugin')) {
+                def runtime = candidate.configurations.named('runtimeClasspath').get()
+                def graph = runtime.incoming.resolutionResult.rootComponent.map { VerifyNonWebRuntime.inspect(it) }
+                def verification = candidate == rootProject ? runtimeChecks
+                        : candidate.tasks.register('verifyNonWebRuntime', VerifyNonWebRuntime)
+                verification.configure {
+                    group = 'verification'
+                    description = 'Rejects web stacks in this module\'s resolved application runtime classpath.'
+                    classpathName.set(candidate.path == ':' ? ':runtimeClasspath' : "${candidate.path}:runtimeClasspath".toString())
+                    resolvedModules.set(graph.map { it.modules })
+                    resolutionFailures.set(graph.map { it.failures })
+                }
+                candidate.tasks.named('check').configure { dependsOn verification }
+                if (candidate != rootProject) runtimeChecks.configure { dependsOn verification }
+            }
+        }
+    }
+}

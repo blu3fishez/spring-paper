@@ -1,0 +1,15 @@
+plugins { id 'org.blu3fishez.spring-paper' }
+group = 'org.blu3fishez.springpaper.example'
+version = '0.1.0-SNAPSHOT'
+
+springPaper {
+    paper {
+        apiCoordinate = 'io.papermc.paper:paper-api:26.3.build.244-stable'
+        apiVersion = '26.3'
+    }
+    development {
+        minecraftVersion = '26.3'
+        build = 244
+        acceptEula = false
+    }
+}

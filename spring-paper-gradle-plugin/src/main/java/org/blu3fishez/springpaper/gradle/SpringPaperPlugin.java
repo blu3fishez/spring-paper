@@ -1,95 +1,49 @@
 package org.blu3fishez.springpaper.gradle;
 
-import com.github.jengelman.gradle.plugins.shadow.ShadowPlugin;
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Properties;
-import org.blu3fishez.springpaper.config.YamlDocument;
-import org.blu3fishez.springpaper.config.PaperConfiguration;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.DuplicatesStrategy;
-import org.gradle.api.plugins.JavaPluginExtension;
-import org.gradle.api.tasks.SourceSetContainer;
-import org.gradle.api.tasks.bundling.Jar;
-import org.gradle.jvm.toolchain.JavaLanguageVersion;
-import org.gradle.jvm.toolchain.JavaToolchainService;
 import xyz.jpenilla.runpaper.RunPaperPlugin;
 import xyz.jpenilla.runpaper.task.RunServer;
+import xyz.jpenilla.runtask.service.DownloadsAPIService;
 
 public final class SpringPaperPlugin implements Plugin<Project> {
     @Override public void apply(Project project) {
-        project.getPluginManager().apply("java-library");
-        SpringPaperExtension extension = project.getExtensions().create("springPaper", SpringPaperExtension.class);
-        extension.getConfigurationFile().convention(project.getLayout().getProjectDirectory().file(
-                project.getProviders().gradleProperty("springPaper.configuration").getOrElse("src/main/resources/application.yml")));
-        var yamlText = project.getProviders().fileContents(extension.getConfigurationFile()).getAsText();
-        // 실제 소비 빌드에서 afterEvaluate로 toolchain을 늦게 바꾸면 languageVersion이 이미 finalized라 실패했다.
-        // Shadow/run-paper 적용 전에 Provider를 연결한다. YAML 파일 선택은 확장 속성으로 계속 변경 가능하다.
-        project.getExtensions().getByType(JavaPluginExtension.class).getToolchain().getLanguageVersion().set(
-                yamlText.map(text -> JavaLanguageVersion.of(PaperConfiguration.of(YamlDocument.read(new ByteArrayInputStream(
-                        text.getBytes(StandardCharsets.UTF_8)))).integer("spring.paper.minecraft.java-version", 25))));
-        project.getPluginManager().apply(ShadowPlugin.class);
+        HostPluginSetup.apply(project, "paper");
+        var extension = project.getExtensions().create("springPaper", SpringPaperExtension.class);
+        var legacy = HostPluginSetup.legacy(project, extension.getConfigurationFile(), "springPaper.configuration");
+        var target = extension.getPaper();
+        var api = target.getApiCoordinate().map(value -> LegacyBuildSettings.coordinate(value, "", "Paper apiCoordinate is required"))
+                .orElse(legacy.map(values -> {
+                    var config = LegacyBuildSettings.configuration(values);
+                    String minecraft = config.text("spring.paper.minecraft.version", "");
+                    return LegacyBuildSettings.coordinate(config.text("spring.paper.minecraft.api-coordinate", minecraft.isBlank() ? "" : minecraft + ".build.+"),
+                            "io.papermc.paper:paper-api", "Compilation requires springPaper.paper.apiCoordinate (or legacy minecraft.version/api-coordinate)");
+                }));
+        project.getDependencies().addProvider("compileOnly", api);
+        var shadow = HostPluginSetup.packaging(project, "paper", extension.getConfigurationFile(), target.getApiVersion());
         project.getPluginManager().apply(RunPaperPlugin.class);
-        var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-        var main = sourceSets.getByName("main");
-        var descriptor = project.getTasks().register("generatePaperPluginDescriptor", GeneratePluginDescriptor.class, task -> {
-            task.getClasses().from(main.getOutput().getClassesDirs());
-            task.getLibraries().from(project.getConfigurations().getByName("runtimeClasspath"));
-            task.getConfigurationFile().set(extension.getConfigurationFile());
-            task.getPluginVersion().set(project.getVersion().toString());
-            task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated/spring-paper"));
-            task.dependsOn(project.getTasks().named("compileJava"));
+        var development = extension.getDevelopment();
+        HostPluginSetup.development(project, development, legacy, "spring.paper.development");
+        var version = development.getMinecraftVersion().orElse(legacy.map(values -> {
+            String value = LegacyBuildSettings.configuration(values).text("spring.paper.minecraft.version", "");
+            return value.isBlank() ? null : value;
+        }));
+        var build = development.getBuild().orElse(legacy.map(values -> {
+            int value = LegacyBuildSettings.configuration(values).integer("spring.paper.minecraft.build", 0);
+            return value > 0 ? value : null;
+        }));
+        project.getTasks().register("preparePaperServer", PrepareHostServer.class, task ->
+                task.configure("paper", shadow.flatMap(value -> value.getArchiveFile()), development));
+        project.getTasks().named("runServer", RunServer.class).configure(task -> {
+            task.dependsOn(shadow);
+            task.getVersion().set(version);
+            task.getBuild().set(build.map(DownloadsAPIService.Build.Specific::new));
+            task.getRunDirectory().set(development.getDirectory());
+            task.getJvmArgumentProviders().add(new DevelopmentJvmArguments(development.getJvmArgs()));
+            var session = new NativeLaunchSession();
+            var artifact = shadow.flatMap(value -> value.getArchiveFile());
+            task.doFirst(new RunHostPreparation("paper", artifact, project.getLayout().getBuildDirectory().file("spring-paper/native-plan.txt"), development.getAcceptEula(), development.getServerProperties(), session));
+            task.doLast(new RunHostFinalization(session));
         });
-        project.getTasks().withType(Jar.class).configureEach(task -> task.from(descriptor.flatMap(GeneratePluginDescriptor::getOutputDirectory)));
-        project.getTasks().named("jar", Jar.class).configure(task -> task.getArchiveClassifier().set("plain"));
-        project.getTasks().named("shadowJar", ShadowJar.class).configure(task -> {
-            task.getArchiveClassifier().set("");
-            task.mergeServiceFiles();
-            // Shadow의 중복 제외가 transformer보다 먼저 적용되면 선택 모듈의 ServiceLoader 제공자가 사라진다.
-            // 서비스 파일은 병합 단계까지 전달한다. Kotlin metadata도 같은 이름이 나타나므로 별도로 보존한다.
-            task.filesMatching("META-INF/services/**", details -> details.setDuplicatesStrategy(DuplicatesStrategy.INCLUDE));
-            task.filesMatching("META-INF/*.kotlin_module", details -> details.setDuplicatesStrategy(DuplicatesStrategy.INCLUDE));
-            task.exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/INDEX.LIST");
-            task.dependencies(filter -> filter.exclude(filter.dependency("org.slf4j:.*:.*")));
-        });
-        project.getTasks().named("assemble").configure(task -> task.dependsOn("shadowJar"));
-        project.getRepositories().mavenCentral();
-        project.getRepositories().maven(repository -> repository.setUrl("https://repo.papermc.io/repository/maven-public/"));
-        project.getDependencies().add("implementation", "org.blu3fishez.springpaper:spring-paper-core:" + version());
-        project.afterEvaluate(ignored -> {
-            String content = project.getProviders().fileContents(extension.getConfigurationFile()).getAsText().get();
-            PaperConfiguration config = PaperConfiguration.of(YamlDocument.read(new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))));
-            String minecraft = config.required("spring.paper.minecraft.version");
-            String api = config.text("spring.paper.minecraft.api-coordinate", minecraft + ".build.+");
-            project.getDependencies().add("compileOnly", "io.papermc.paper:paper-api:" + api);
-            int javaVersion = config.integer("spring.paper.minecraft.java-version", 25);
-            var runDirectory = project.getLayout().getProjectDirectory().dir(config.text("spring.paper.development.directory", "run"));
-            var prepare = project.getTasks().register("preparePaperServer", PreparePaperServer.class, task -> {
-                task.getAcceptEula().set(config.enabled("spring.paper.development.accept-eula"));
-                task.getServerProperties().set(config.children("spring.paper.development.server-properties"));
-                task.getServerPropertiesFile().set(runDirectory.file("server.properties"));
-                task.getEulaFile().set(runDirectory.file("eula.txt"));
-            });
-            var toolchains = project.getExtensions().getByType(JavaToolchainService.class);
-            project.getTasks().named("runServer", RunServer.class).configure(task -> {
-                task.dependsOn(prepare);
-                task.minecraftVersion(minecraft);
-                task.getRunDirectory().set(runDirectory);
-                task.getJavaLauncher().set(toolchains.launcherFor(spec -> spec.getLanguageVersion().set(JavaLanguageVersion.of(javaVersion))));
-                if (config.integer("spring.paper.minecraft.build", 0) > 0) task.build(config.integer("spring.paper.minecraft.build", 0));
-                task.jvmArgs(config.strings("spring.paper.development.jvm-args"));
-            });
-        });
-    }
-    private static String version() {
-        Properties properties = new Properties();
-        try (var input = SpringPaperPlugin.class.getResourceAsStream("/spring-paper-version.properties")) {
-            if (input == null) throw new IllegalStateException("Missing Spring Paper version metadata");
-            properties.load(input);
-            return properties.getProperty("version");
-        } catch (IOException error) { throw new IllegalStateException(error); }
     }
 }

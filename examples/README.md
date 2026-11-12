@@ -1,12 +1,16 @@
 # 기능별 예제 플러그인
 
-Paper 예제는 Java 25·Paper 26.3 build 244·Spring Framework 7.0.10·Lombok 1.18.48을 사용한다.
-별도 Velocity 예제는 Java 25·Velocity 4.2.1-SNAPSHOT·Spring Framework 7.0.10을 사용한다.
+Paper 예제는 Java 25·Paper 26.3 build 244·Spring Framework 7.0.10을 사용한다.
+별도 Velocity 예제는 Java 25·Velocity 4.2.1-SNAPSHOT build 43을 사용한다.
+현재 라이브러리는 Spring Boot 4.1.2 core+autoconfigure의 비웹 컨텍스트를 사용한다.
 각 폴더가 독립 Gradle 소비 프로젝트이며 `includeBuild('../..')`로 현재 라이브러리를 사용한다.
-공통 프레임워크를 한 플러그인에 모두 넣지 않아도 되는 예제들이다.
+새 앱은 ordinary root 예제에서 시작하고 필요한 업무 모듈을 같은 플러그인 안에 조립한다.
+기존 native carrier·명시 scan 예제도 호환 경로로 유지한다.
 
 | 예제 | 보여주는 기능 | 콘솔 검증 |
 |---|---|---|
+| [boot-paper-plugin](boot-paper-plugin/README.md) | ordinary Paper root·일반 service/typed properties·host별 DSL·flat JAR·native 설정 준비 | host 기동 없이 assemble/prepare 검증 |
+| [boot-velocity-plugin](boot-velocity-plugin/README.md) | ordinary Velocity root·공용 bridge/own-JAR metadata·별도 plugin JAR/run/config task | controlled native loader 검증; proxy 기동 제외 |
 | [business-plugin](business-plugin/README.md) | @Scheduled 만료 정리·안전한 DB→main·소비자 worker/decorator·전용/기본 JDBC 공존·앱 내부 조건부 기능 | paper-inbox |
 | [minimal-plugin](minimal-plugin/README.md) | 진입점·생성자 주입·@Value·initializer·profile·외부 설정·선택 Module SPI·리스너·명령/alias/반복 메타데이터·시작/종료 | paper-hello, paper-hi, paper-welcome |
 | [scheduling-plugin](scheduling-plugin/README.md) | @Scheduled 메인/백그라운드, TaskScheduler 일회성/취소, tick 작업과 자체 취소, @Async, executor, 키·메타데이터·기존 config·청크 lease | paper-scheduling |
@@ -20,7 +24,9 @@ Core, config, Gradle plugin, JDBC, JPA, Cache, PDC, Security와 host-neutral Sec
 Velocity bootstrap은 독립 `spring-paper-velocity`가 제공한다. 인증 서비스 호출은 security-core와
 소비자 Provider·이벤트 어댑터를 같은 컨텍스트에 조립한다.
 
-복사할 업무 흐름은 **[business-plugin](business-plugin/README.md)**부터 시작한다.
+새 진입점은 **[boot-paper-plugin](boot-paper-plugin/README.md)** 또는
+**[boot-velocity-plugin](boot-velocity-plugin/README.md)**을 사용한다.
+복사할 업무 흐름은 [business-plugin](business-plugin/README.md)을 참고한다.
 기본 worker가 충분하면 커스텀 executor 구성을 생략한다. 기존 scheduling/guide 예제의 counter와
 검증 Future·start/stop은 통합 검증 장치이며 최소 업무 구현의 필수 코드가 아니다.
 
@@ -29,9 +35,16 @@ Velocity bootstrap은 독립 `spring-paper-velocity`가 제공한다. 인증 서
 저장소 루트에서 예를 들어 다음을 실행한다.
 
 ```sh
+./gradlew -p examples/boot-paper-plugin assemble
+./gradlew -p examples/boot-velocity-plugin assemble
 ./gradlew -p examples/minimal-plugin build
 ```
 
+ordinary 예제의 YAML은 런타임 설정이며 compile target은 Gradle DSL에 있다. `help/tasks`는 YAML과
+target 없이 조회할 수 있고 `assemble`에는 실행 target·secret이 필요 없다. 준비 작업의 owned 디렉터리·
+drift/plan-only 정책과 Paper→기존 Velocity 연결은 각 ordinary 예제 README를 따른다.
+
+다음은 기존 Paper 예제의 로컬 실행 방법이며, 현재 Boot 전환의 실제 host 실행 검증과 구별한다.
 실행할 때는 해당 예제의 `src/main/resources/application.yml`을 예제 루트의
 `application-local.yml`로 복사한다. Minecraft EULA에 수락한 경우에만 로컬 파일의
 `spring.paper.development.accept-eula`를 true로 바꾼다. 배포 설정의 기본값은 false다.

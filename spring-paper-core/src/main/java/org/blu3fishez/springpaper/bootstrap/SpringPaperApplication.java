@@ -1,16 +1,13 @@
 package org.blu3fishez.springpaper.bootstrap;
 
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.experimental.Accessors;
-
+import org.blu3fishez.springpaper.boot.ApplicationRootMetadata;
+import org.blu3fishez.springpaper.boot.BootApplication;
+import org.blu3fishez.springpaper.boot.config.ConfigDataSettings;
 import org.blu3fishez.springpaper.internal.PaperLifecycleAnnotations;
 import java.util.Arrays;
 import java.util.List;
 import java.util.ServiceLoader;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import org.blu3fishez.springpaper.annotation.PaperCommandExecutor;
 import org.blu3fishez.springpaper.annotation.PaperEventListener;
 import org.blu3fishez.springpaper.annotation.SpringPaperPluginApplication;
@@ -34,20 +31,32 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.scheduling.config.TaskManagementConfigUtils;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.availability.AvailabilityChangeEvent;
+import org.springframework.boot.availability.ReadinessState;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
 
 /** One plugin-owned application, with no JVM-global context or server shutdown policy. */
-@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SpringPaperApplication implements AutoCloseable {
     private final JavaPlugin plugin;
-    @Getter
-    @Accessors(fluent = true, chain = false)
-    private final AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+    private final Class<?> root;
+    private final PaperBootHandoff handoff = new PaperBootHandoff();
+    private AnnotationConfigApplicationContext context;
+    private java.util.Map<String, Class<?>> candidates;
     private PaperLifecycleManager lifecycle;
     private PaperListenerRegistrar listeners;
     private PaperCommandRegistrar commands;
     private boolean closed;
 
-    public static SpringPaperApplication run(JavaPlugin plugin) {
+    private SpringPaperApplication(JavaPlugin plugin, Class<?> root) { this.plugin = plugin; this.root = root; }
+
+    public AnnotationConfigApplicationContext context() { return context; }
+
+    public static SpringPaperApplication run(JavaPlugin plugin) { return run(plugin, null); }
+
+    /** Starts an ordinary application root using the same native lifecycle as the legacy carrier. */
+    public static SpringPaperApplication run(JavaPlugin plugin, Class<?> root) {
         if (!plugin.getServer().isPrimaryThread()) throw new IllegalStateException("Start Spring Paper on the server thread");
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
@@ -56,7 +65,7 @@ public final class SpringPaperApplication implements AutoCloseable {
             // 초기 조건 평가에서 그 로더를 사용한다. 생성 뒤 context.setClassLoader만
             // 호출하면 실제 Paper의 서버 로더로 소비자 조건 클래스를 찾다가 실패한다.
             // refresh뿐 아니라 컨텍스트 생성부터 플러그인 로더 범위 안에서 실행한다.
-            SpringPaperApplication application = new SpringPaperApplication(plugin);
+            SpringPaperApplication application = new SpringPaperApplication(plugin, root);
             try { application.start(); return application; }
             catch (Throwable error) {
                 try { application.close(); } catch (Throwable cleanup) { error.addSuppressed(cleanup); }
@@ -68,19 +77,44 @@ public final class SpringPaperApplication implements AutoCloseable {
 
     private void start() throws Exception {
         SpringPaperPluginApplication annotation = plugin.getClass().getAnnotation(SpringPaperPluginApplication.class);
-        if (annotation == null) throw new IllegalArgumentException("Plugin requires @SpringPaperPluginApplication");
+        var ordinary = root == null ? null : AnnotatedElementUtils.findMergedAnnotation(root,
+                org.blu3fishez.springpaper.annotation.SpringPaperApplication.class);
+        if (root == null && annotation == null) throw new IllegalArgumentException("Plugin requires @SpringPaperPluginApplication");
+        if (root != null && ordinary == null) throw new IllegalArgumentException("Root requires @SpringPaperApplication");
         ClassLoader loader = plugin.getClass().getClassLoader();
-        // 클래스 정의와 리소스 탐색은 다른 책임이다. PaperResourceLoader의 실제 기동 실패 기록 참고.
-        context.setClassLoader(loader);
-        context.setResourceLoader(new PaperResourceLoader(loader, JavaPlugin.class.getClassLoader()));
-        context.setAllowBeanDefinitionOverriding(false);
-        context.setEnvironment(PaperEnvironment.load(plugin, annotation.configuration()));
+        var environment = root == null ? PaperEnvironment.load(plugin, annotation.configuration())
+                : ConfigDataSettings.prepare(ApplicationRootMetadata.artifact(plugin.getClass()), plugin.getDataFolder().toPath());
+        var boot = new BootApplication(root == null ? LegacyConfiguration.class : root, loader,
+                new PaperResourceLoader(loader, JavaPlugin.class.getClassLoader()), environment, root != null,
+                new BootApplication.Hooks(prepared -> handoff.onMain(() -> {
+                    context = prepared;
+                    initialize(annotation, ordinary);
+                }), prepared -> candidates = prepared.getBean(PaperBeanCatalog.class).candidates(prepared.getBeanFactory()),
+                        prepared -> handoff.onMain(this::activate), () -> handoff.onMain(this::closeNative),
+                        handoff::checkCloseAllowed));
+        try { handoff.prepare(() -> withLoader(loader, boot::run)); }
+        catch (InterruptedException error) { Thread.currentThread().interrupt(); throw error; }
+        catch (ExecutionException error) {
+            if (error.getCause() instanceof Error fatal) throw fatal;
+            if (error.getCause() instanceof RuntimeException runtime) throw runtime;
+            throw new IllegalStateException("Spring context preparation failed", error.getCause());
+        }
+        context.publishEvent(new PaperApplicationReadyEvent(plugin));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableAutoConfiguration
+    @EnableConfigurationProperties
+    static class LegacyConfiguration {}
+
+    private void initialize(SpringPaperPluginApplication annotation,
+            org.blu3fishez.springpaper.annotation.SpringPaperApplication ordinary) {
+        ClassLoader loader = plugin.getClass().getClassLoader();
         PaperConfiguration configuration = new PaperConfiguration(context.getEnvironment());
-        var factory = context.getBeanFactory();
         PaperCoreConfiguration.registerHost(context, plugin, configuration);
         // 기존 Bukkit 설정의 검증/host 객체 캡처는 Paper thread에서 끝내고 refresh worker에 값으로 전달한다.
         // Spring의 표준 initializer를 사용하며 initializer 자체를 별도 컨테이너/서비스 로케이터로 만들지 않는다.
-        for (var initializer : annotation.initializers()) {
+        for (var initializer : ordinary == null ? annotation.initializers() : ordinary.initializers()) {
             org.springframework.beans.BeanUtils.instantiateClass(initializer).initialize(context);
         }
         context.addBeanFactoryPostProcessor(beans -> {
@@ -97,24 +131,19 @@ public final class SpringPaperApplication implements AutoCloseable {
                 }
             }
         });
-        context.register(annotation.configurations());
-        Arrays.stream(annotation.scanBasePackageClasses()).map(Class::getPackageName).distinct().forEach(context::scan);
-        ServiceLoader.load(SpringPaperModule.class, loader).forEach(module -> {
-            if (configuration.enabled(module.enabledProperty())) context.register(module.configurationClass());
-        });
-        // 컨텍스트 refresh는 DB 연결/스키마 검사를 포함한다. 작업자에서 준비하되 완료를 기다린다.
-        // 기다리지 않고 onEnable을 반환하면 미완성 컨텍스트로 이벤트가 들어오는 시작 경쟁이 생긴다.
-        // Spring의 PostConstruct/SmartLifecycle은 이 작업자에서 호출되므로 Paper 변경은 아래 훅에서 한다.
-        java.util.Map<String, Class<?>> candidates;
-        try (var preparation = Executors.newVirtualThreadPerTaskExecutor()) {
-            candidates = preparation.submit(() -> withLoader(loader, () -> {
-                context.refresh();
-                // Ordinary FactoryBeans create their product on first lookup, not necessarily
-                // during refresh. Product preparation/postprocessing still belongs to this worker.
-                return context.getBean(PaperBeanCatalog.class).candidates(factory);
-            })).get();
-        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw error; }
-        catch (ExecutionException error) { throw new IllegalStateException("Spring context preparation failed", error.getCause()); }
+        if (ordinary == null) {
+            context.register(annotation.configurations());
+            Arrays.stream(annotation.scanBasePackageClasses()).map(Class::getPackageName).distinct().forEach(context::scan);
+            // Built-in modules are Boot imports in both modes. Only legacy consumers retain user SPI discovery.
+            ServiceLoader.load(SpringPaperModule.class, loader).forEach(module -> {
+                if (configuration.enabled(module.enabledProperty())) context.register(module.configurationClass());
+            });
+        }
+    }
+
+    private void activate() {
+        ClassLoader loader = plugin.getClass().getClassLoader();
+        var factory = context.getBeanFactory();
         lifecycle = new PaperLifecycleManager(context, candidates);
         lifecycle.start();
         var invocations = new PaperInvocationService(context.getBeanProvider(PaperInvocationInterceptor.class).orderedStream().toList(), loader);
@@ -146,7 +175,6 @@ public final class SpringPaperApplication implements AutoCloseable {
                 commands.register(entry.name, entry.bean, command);
             }
         });
-        context.publishEvent(new PaperApplicationReadyEvent(plugin));
     }
 
     private static <T> T withLoader(ClassLoader loader, java.util.function.Supplier<T> action) {
@@ -158,9 +186,19 @@ public final class SpringPaperApplication implements AutoCloseable {
     private record Adapter(String name, Object bean, Class<?> type) {}
 
     @Override public void close() {
+        if (!plugin.getServer().isPrimaryThread()) throw new IllegalStateException("Stop Spring Paper on the server thread");
+        withLoader(plugin.getClass().getClassLoader(), () -> {
+            if (context == null) closeNative();
+            else context.close();
+            return null;
+        });
+    }
+
+    private void closeNative() {
         if (closed) return;
         if (!plugin.getServer().isPrimaryThread()) throw new IllegalStateException("Stop Spring Paper on the server thread");
         closed = true;
+        if (context == null) return;
         ClassLoader previous = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(plugin.getClass().getClassLoader());
         RuntimeException failure = null;
@@ -183,8 +221,10 @@ public final class SpringPaperApplication implements AutoCloseable {
             // Keep worker admission open through those flush hooks; ContextClosedEvent is too early
             // for consumer executors that reject new DB work on that standard Spring event.
             AutoCloseable mainBarrier = workers == null ? null : workers::quiesceMainThread;
-            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, scheduled, scheduler, ticks,
-                    mainBarrier, lifecycle, tickets, workers, context }) {
+            AutoCloseable refusing = context.isActive()
+                    ? () -> AvailabilityChangeEvent.publish(context, ReadinessState.REFUSING_TRAFFIC) : null;
+            for (AutoCloseable resource : new AutoCloseable[] { commands, listeners, refusing, scheduled, scheduler, ticks,
+                    mainBarrier, lifecycle, tickets, workers }) {
                 if (resource == null) continue;
                 try { resource.close(); }
                 catch (Exception error) {

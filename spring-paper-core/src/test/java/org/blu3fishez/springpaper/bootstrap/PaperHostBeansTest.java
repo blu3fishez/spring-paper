@@ -30,9 +30,17 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 
 class PaperHostBeansTest {
     @Test void configurationExposesHostTypesBeforeAnyBeanIsInstantiated() {
+        assertTypedHostDefinitions(PaperCoreConfiguration.class);
+    }
+
+    @Test void ordinaryRootImportsTypedHostDefinitionsForToolingBeforeInstantiation() {
+        assertTypedHostDefinitions(org.blu3fishez.springpaper.fixture.bootapp.BootRoot.class);
+    }
+
+    private void assertTypedHostDefinitions(Class<?> configuration) {
         var beans = new DefaultListableBeanFactory();
         beans.setAllowBeanDefinitionOverriding(false);
-        new AnnotatedBeanDefinitionReader(beans).register(PaperCoreConfiguration.class);
+        new AnnotatedBeanDefinitionReader(beans).register(configuration);
         new ConfigurationClassPostProcessor().postProcessBeanDefinitionRegistry(beans);
         String[] existingSingletons = beans.getSingletonNames();
         for (var expected : Map.of(JavaPlugin.class, "paperPlugin", Server.class, "paperServer",

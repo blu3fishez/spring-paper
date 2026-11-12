@@ -1,4 +1,5 @@
 dependencies {
+    api project(':spring-paper-boot')
     api project(':spring-paper-config')
     api 'org.springframework:spring-context'
     compileOnly "io.papermc.paper:paper-api:${rootProject.paperVersion}"

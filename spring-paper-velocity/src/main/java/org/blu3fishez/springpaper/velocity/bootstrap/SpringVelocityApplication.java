@@ -7,12 +7,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.blu3fishez.springpaper.boot.BootApplication;
+import org.blu3fishez.springpaper.boot.config.ConfigDataSettings;
 import org.blu3fishez.springpaper.velocity.internal.VelocityInputRegistrar;
 import org.slf4j.Logger;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.DefaultResourceLoader;
 
 /**
  * Connects one Velocity-created plugin to one Spring context. Delegate the native initialize/shutdown
@@ -26,6 +30,7 @@ public final class SpringVelocityApplication {
     private final Class<?> configuration;
     private final List<ApplicationContextInitializer<ConfigurableApplicationContext>> initializers;
     private final ClassLoader classLoader;
+    private final Path artifact;
     private final Object lifecycleMonitor = new Object();
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final VelocityInputRegistrar inputs;
@@ -36,6 +41,13 @@ public final class SpringVelocityApplication {
     @SafeVarargs
     public SpringVelocityApplication(Object plugin, ProxyServer proxy, Logger logger, Path dataDirectory,
             Class<?> configuration, ApplicationContextInitializer<ConfigurableApplicationContext>... initializers) {
+        this(plugin, proxy, logger, dataDirectory, configuration, null, initializers);
+    }
+
+    @SafeVarargs
+    SpringVelocityApplication(Object plugin, ProxyServer proxy, Logger logger, Path dataDirectory,
+            Class<?> configuration, Path artifact,
+            ApplicationContextInitializer<ConfigurableApplicationContext>... initializers) {
         this.plugin = Objects.requireNonNull(plugin);
         this.proxy = Objects.requireNonNull(proxy);
         this.logger = Objects.requireNonNull(logger);
@@ -43,6 +55,7 @@ public final class SpringVelocityApplication {
         this.configuration = Objects.requireNonNull(configuration);
         this.initializers = List.copyOf(Arrays.asList(initializers));
         this.classLoader = plugin.getClass().getClassLoader();
+        this.artifact = artifact;
         this.inputs = new VelocityInputRegistrar(plugin, proxy, stopping::get);
     }
 
@@ -74,32 +87,41 @@ public final class SpringVelocityApplication {
                 throw new IllegalStateException("Velocity application initialization already failed");
             }
             startupAttempted = true;
-            // AbstractApplicationContext captures TCCL during construction, before setClassLoader.
-            // Keep construction, initializers, refresh and failure destruction in this same scope.
-            context = new AnnotationConfigApplicationContext();
             try {
-                context.setClassLoader(classLoader);
-                context.setAllowBeanDefinitionOverriding(false);
-                context.setBeanNameGenerator(FullyQualifiedAnnotationBeanNameGenerator.INSTANCE);
-                VelocityHostConfiguration.register(context, plugin, proxy, logger, dataDirectory);
-                for (var initializer : initializers) initializer.initialize(context);
-                context.register(configuration);
-                context.addBeanFactoryPostProcessor(VelocityInputRegistrar::validateDefinitions);
-                if (stopping.get()) {
-                    context.close();
-                    return;
-                }
-                context.refresh();
-                inputs.register(context);
-                ready = !stopping.get();
-                if (stopping.get()) context.close();
+                var environment = artifact == null ? new StandardEnvironment()
+                        : ConfigDataSettings.prepare(artifact, dataDirectory);
+                var application = new BootApplication(configuration, classLoader,
+                        new DefaultResourceLoader(classLoader), environment, artifact != null,
+                        new BootApplication.Hooks(this::initializeContext, ignored -> {}, this::activate, this::beforeClose));
+                application.setBeanNameGenerator(FullyQualifiedAnnotationBeanNameGenerator.INSTANCE);
+                application.run();
             } catch (RuntimeException | Error failure) {
                 ready = false;
                 try { inputs.close(); } catch (RuntimeException | Error cleanup) { suppress(failure, cleanup); }
-                try { context.close(); } catch (RuntimeException | Error cleanup) { suppress(failure, cleanup); }
+                try { if (context != null) context.close(); }
+                catch (RuntimeException | Error cleanup) { suppress(failure, cleanup); }
                 throw failure;
             }
         }
+    }
+
+    private void initializeContext(AnnotationConfigApplicationContext created) {
+        context = created;
+        VelocityHostConfiguration.register(created, plugin, proxy, logger, dataDirectory);
+        for (var initializer : initializers) initializer.initialize(created);
+        created.addBeanFactoryPostProcessor(VelocityInputRegistrar::validateDefinitions);
+        if (stopping.get()) throw new IllegalStateException("Velocity application is stopping");
+    }
+
+    private void activate(AnnotationConfigApplicationContext started) {
+        inputs.register(started);
+        ready = !stopping.get();
+        if (stopping.get()) throw new IllegalStateException("Velocity application is stopping");
+    }
+
+    private void beforeClose() {
+        ready = false;
+        inputs.close();
     }
 
     private void closeContext(Throwable failure) {

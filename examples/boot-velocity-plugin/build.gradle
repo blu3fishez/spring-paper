@@ -1,0 +1,11 @@
+plugins { id 'org.blu3fishez.spring-velocity' }
+group = 'org.blu3fishez.springpaper.example'
+version = '0.1.0-SNAPSHOT'
+
+springVelocity {
+    apiCoordinate = 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
+    development {
+        version = '4.2.1-SNAPSHOT'
+        buildNumber = 43
+    }
+}

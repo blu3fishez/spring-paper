@@ -21,6 +21,8 @@ import org.objectweb.asm.Opcodes;
 final class PluginMetadataReader {
     private static final String PREFIX = "Lorg/blu3fishez/springpaper/annotation/";
     final Map<String, Map<String, Object>> applications = new LinkedHashMap<>();
+    final Map<String, String> hosts = new LinkedHashMap<>();
+    final Map<String, Boolean> ordinaryRoots = new LinkedHashMap<>();
     final Map<String, Map<String, Object>> commands = new LinkedHashMap<>();
 
     void read(Path path, boolean applicationSource) throws IOException {
@@ -50,7 +52,13 @@ final class PluginMetadataReader {
             @Override public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                 Map<String, Object> data;
                 if (applicationSource && descriptor.equals(PREFIX + "SpringPaperPluginApplication;")) {
-                    data = applications.computeIfAbsent(name, key -> new LinkedHashMap<>());
+                    data = application(name, "paper", false);
+                } else if (applicationSource && descriptor.equals(PREFIX + "SpringPaperApplication;")) {
+                    data = application(name, "paper", true);
+                } else if (applicationSource && descriptor.equals("Lorg/blu3fishez/springpaper/velocity/annotation/SpringVelocityApplication;")) {
+                    data = application(name, "velocity", true);
+                } else if (applicationSource && descriptor.equals("Lcom/velocitypowered/api/plugin/Plugin;")) {
+                    data = application(name, "velocity", false);
                 } else if (descriptor.equals(PREFIX + "PaperCommandExecutor;")) {
                     data = command(name);
                 } else if (descriptor.equals(PREFIX + "PaperCommandExecutors;")) {
@@ -69,6 +77,14 @@ final class PluginMetadataReader {
                 return visitor(data);
             }
         }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+    }
+    private Map<String, Object> application(String name, String host, boolean ordinary) {
+        if (applications.containsKey(name)) throw new IllegalArgumentException(name + ": declare exactly one application annotation");
+        hosts.put(name, host);
+        ordinaryRoots.put(name, ordinary);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        applications.put(name, metadata);
+        return metadata;
     }
     private Map<String, Object> command(String owner) {
         String key = owner;

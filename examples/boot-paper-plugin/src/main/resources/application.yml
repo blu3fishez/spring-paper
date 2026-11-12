@@ -1,0 +1,7 @@
+game:
+  greeting: Welcome
+# Optional backend forwarding. Enable only after the proxy owner prepares the same secret.
+spring:
+  paper:
+    velocity:
+      enabled: false

@@ -4,6 +4,8 @@ dependencies {
     implementation 'xyz.jpenilla:run-task:3.0.2'
     implementation 'com.gradleup.shadow:shadow-gradle-plugin:9.6.0'
     implementation 'org.ow2.asm:asm:9.9.1'
+    // Matches Velocity 4.2.1 build 43 (git 9a5951c7); build tooling only.
+    implementation 'com.electronwill.night-config:toml:3.9.0'
     testImplementation gradleTestKit()
 }
 gradlePlugin {
@@ -13,6 +15,12 @@ gradlePlugin {
             implementationClass = 'org.blu3fishez.springpaper.gradle.SpringPaperPlugin'
             displayName = 'Spring Paper'
             description = 'Build, package and run annotation-configured Spring Paper plugins.'
+        }
+        springVelocity {
+            id = 'org.blu3fishez.spring-velocity'
+            implementationClass = 'org.blu3fishez.springpaper.gradle.SpringVelocityPlugin'
+            displayName = 'Spring Velocity'
+            description = 'Build, package and prepare Spring Velocity applications.'
         }
     }
 }

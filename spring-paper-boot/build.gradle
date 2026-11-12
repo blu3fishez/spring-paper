@@ -1,0 +1,5 @@
+dependencies {
+    api project(':spring-paper-config')
+    api "org.springframework.boot:spring-boot:${rootProject.bootVersion}"
+    api "org.springframework.boot:spring-boot-autoconfigure:${rootProject.bootVersion}"
+}

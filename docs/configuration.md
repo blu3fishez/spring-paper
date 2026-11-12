@@ -1,20 +1,66 @@
 # 설정과 확장 계약
 
-## 로딩
+## 새 ordinary root의 로딩
 
-런타임은 진입점의 `configuration`(기본 application.yml) 리소스와 플러그인 데이터 디렉터리의 같은 파일을 합친다. 외부 파일이 JAR 기본값을 덮어쓴다. Spring 시스템 프로퍼티·환경 변수는 YAML보다 우선하며 `${ENV:default}` placeholder를 해석한다. 환경 변수는 Spring의 표준 이름 변환을 사용한다(예: SPRING_PAPER_JPA_ENABLED).
+`@SpringPaperApplication`과 `@SpringVelocityApplication`은 Boot 4.1.2 ConfigData를 사용한다.
+기본 탐색 위치는 **자기 plugin JAR의 루트 → native plugin dataDir**이며 native 서버 cwd를
+암묵적으로 검색하지 않는다. 리소스는 선택 사항이다. 외부 base는 packaged profile보다 우선하며,
+동일 위치에서는 profile 설정이 base를 덮고 뒤 active profile이 앞 profile을 덮는 Boot 순서를 따른다.
+Paper dataDir은 `plugins/<plugin name>`, Velocity dataDir은 native 호스트가 제공한 plugin 디렉터리다.
 
-`spring.profiles.active`에 지정한 프로필 순서대로 application-{profile}.yml도 합친다. 각 프로필은 JAR → 외부 파일 순서이며 뒤 프로필이 앞 프로필을 덮어쓴다. 비밀값을 JAR에 포함하지 않는다.
+```yaml
+# src/main/resources/application.yml 또는 플러그인 dataDir/application.yml
+game:
+  greeting: '${GREETING:Welcome}'
+```
 
-configuration 리소스가 .yaml이면 프로필 파일도 .yaml 확장자를 유지한다. 프로필 파일 안에서 spring.profiles.active를 다시 정의하면 시작 오류로 알린다.
+root 아래 `@ConfigurationProperties("game")` record/class를 두고 생성자로 주입한다.
+root의 `configurationPropertiesScanBasePackageClasses`로 typed scan 범위를 변경할 수 있다.
+일반 빈은 `scanBasePackageClasses`를 사용한다. Boot auto-configuration·typed properties와
+애플리케이션 component scan은 각각의 표준 조건을 따르며 선택 모듈 flag와는 별개다.
 
-Gradle 개발 설정은 `springPaper.configurationFile`의 YAML(기본 src/main/resources/application.yml)에서 읽는다. 런타임 프로필이나 서버의 외부 설정 파일을 Gradle 빌드 시 자동 실행·로딩하지 않는다. 개발 서버와 배포 설정은 서로 다른 실행 단계다.
+환경 변수·JVM 시스템 프로퍼티는 ConfigData보다 우선한다. `SPRING_PROFILES_ACTIVE` 또는
+`-Dspring.profiles.active=...`로 profile을 고른다. 다른 위치는 `spring.config.location`,
+`spring.config.additional-location`, `spring.config.import`로 명시한다. location은 기본 위치를
+교체하고 additional-location은 추가한다. 프로토콜 없는 상대 import는 선언 리소스 기준이며,
+명시한 상대 `file:` location/import는 native run 디렉터리가 기준이다. forked helper도 같은 cwd를 쓴다.
+`${ENV:default}`, 다중 문서, profile 활성 조건도 Boot ConfigData가 처리한다. 비밀값은 JAR에 넣지 않는다.
+
+prepare/run의 forked ConfigData helper도 자기 산출물·plugin dataDir·JavaExec system properties와
+environment를 사용한다. `tasks.named('runServer') { systemProperty('app.key', 'value') }`처럼
+native JavaExec에 명시한 값이 준비 단계에도 전달된다. Gradle daemon 안에서 앱을 시작하지 않는다.
+native CLI의 설정 파일 경로와 `--online-mode`도 준비 계획에 반영한다.
+
+## 기존 Paper 진입점의 로딩
+
+`@SpringPaperPluginApplication`은 기존 `configuration`(기본 application.yml) 리소스와 플러그인
+dataDir의 같은 파일을 합친다. packaged base → external base → 각 active profile의 packaged → external
+순서를 유지한다. Spring 시스템 프로퍼티·환경 변수는 YAML보다 우선하고 `${ENV:default}`를 해석한다.
+예를 들어 `SPRING_PAPER_JPA_ENABLED`가 적용된다. .yaml 리소스는 profile에도 .yaml 확장자를 유지하고,
+profile 파일에서 `spring.profiles.active`를 재정의하면 시작 오류다. 같은 Boot bootstrap을 사용해도
+이 호환 경로에 새 ConfigData 탐색·import나 root scan을 자동 적용하지 않는다.
+
+기존 Velocity native helper는 명시한 Configuration·initializer를 유지하고 새 ordinary root의
+ConfigData 탐색을 자동 적용하지 않는다. 자세한 경로는 [Velocity 문서](velocity.md)에 있다.
+
+## Gradle target과 개발 설정
+
+새 앱의 compile target은 `springPaper.paper.apiCoordinate`/`apiVersion`,
+`springVelocity.apiCoordinate`로 선언한다. Paper 실행은 `development.minecraftVersion`/`build`,
+Velocity 실행은 `development.version`/`buildNumber`를 별도로 명시한다. JDK는 25다.
+`help/tasks`는 YAML·target이 필요 없고 `assemble`은 실행 target·DB·proxy secret을 읽지 않는다.
+호스트마다 plugin JAR·run task·run 디렉터리를 분리한다. [Paper](../examples/boot-paper-plugin/README.md)와
+[Velocity](../examples/boot-velocity-plugin/README.md)의 최소 DSL을 참고한다.
+
+명시 DSL이 우선하며 기존 Paper 개발 설정은 `springPaper.configurationFile`의 YAML
+(기본 src/main/resources/application.yml)을 fallback으로 읽는다. 런타임 profile/import·서버의 외부
+설정은 compile/descriptor 단계에서 자동 실행·로딩하지 않는다.
 
 명령행에서는 `-PspringPaper.configuration=application-local.yml`로 로컬 전용 전체 설정 파일을 선택할 수 있다. 이 파일은 .gitignore에 포함된다. 기본 예제의 EULA false는 그대로 두고 명시적으로 수락한 로컬 설정으로 개발 서버를 실행할 수 있다.
 
 빌드에 사용되는 Minecraft·개발 서버 설정과 진입점/명령의 문자열 메타데이터에도 `${ENV:default}` 및 YAML 프로퍼티 참조를 사용할 수 있다. 빌드가 읽지 않는 JPA 비밀값 등은 빌드 시 요구하지 않는다. 명령 이름의 build/runtime 설정은 같아야 한다. plugin.yml은 빌드 시 고정되므로 실행 중 환경 변수로 명령 레이블을 바꾸면 시작 검증에서 누락으로 알린다.
 
-## Paper·개발 도구
+## 기존 Paper YAML·개발 도구
 
 | 키 (`spring.paper.` 다음) | 의미 / 기본값 |
 |---|---|
@@ -28,6 +74,24 @@ Gradle 개발 설정은 `springPaper.configurationFile`의 YAML(기본 src/main/
 | development.jvm-args | Java 실행 인자 목록 |
 | development.server-properties | server.properties에 합칠 키와 값. 다른 기존 키는 유지 |
 | lifecycle.shutdown-timeout-seconds | 기본 worker executor 종료 대기, 기본 5초. 사용자 flush의 별도 대기 정책을 대신하지 않음 |
+
+`preparePaperServer`/`prepareVelocityServer`는 새/빈 run 디렉터리에만 native 파일 전체와
+`.spring-paper/owned.properties` hash를 생성한다. 반복 준비는 멱등이며 수동 drift는 충돌이다.
+기존 미소유 파일·외부 CLI 경로는 `build/spring-paper/native-plan.txt` 또는
+`build/spring-velocity/native-plan.txt`에 계획을 산출하고 실행도 중단한다. 기존 파일 apply는 제공하지 않는다.
+계획 옆 `native-proposal.json`에 대상 경로·hash·typed 제안 값과 forwarding secret source/environment
+정책을 기록한다. 민감 키는 `<redacted>`로 가리고 secret-file 경로는 표시한다. plan-only에서는
+secret source 파일을 열지 않는다. 원본 native 파일은 변경하지 않는다.
+성공한 run에서 native가 추가한 기본값/포맷만 바뀌고 생성한 typed 값이 모두 보존됐을 때만 hash를 갱신한다.
+원래 값 변경·삭제나 실패한 run에는 갱신하지 않는다. 실행 중 도구 소유 파일을 편집하지 않는다.
+
+Paper backend는 `spring.paper.velocity.{enabled,online-mode,secret-file}`, 별도 Velocity 앱은
+`spring.velocity.server` typed map으로 준비한다. 공유 파일은 native cwd를 기준으로 해석하며
+launcher가 내용을 소유 프로세스의 `PAPER_VELOCITY_SECRET`/`VELOCITY_FORWARDING_SECRET`에 전달한다.
+JAR·descriptor·계획·로그에는 raw secret을 기록하지 않는다. 기존 실효 환경변수와 다르면 충돌로 중단한다.
+파일 대신 이미 제공한 실효 native secret 환경변수도 사용할 수 있으며 새 secret을 만들지 않는다.
+secret 자동 생성/회전·기존 proxy 원격 등록은 수행하지 않는다. 주소·modern forwarding·online-mode·
+공유 파일의 일치는 proxy 소유자가 준비한다. [상세 예제](../examples/boot-paper-plugin/README.md)를 따른다.
 
 코어 워커는 사용자 stop 이후, DB·캐시 등 컨텍스트 인프라를 닫기 전에 새 제출을 차단하고 실행 중 작업을 기다린다. 컨텍스트 destruction은 시작 실패 정리를 위한 idempotent fallback으로도 close를 호출할 수 있다. 대기 시간이 지나면 워커를 interrupt하고 경고를 남기며, 실제 종료를 무한 대기하거나 저장 완료를 보장하지 않는다. 사용자 flush·멱등 재시도·내구성 정책은 각 기능이 유지한다.
 
@@ -223,7 +287,15 @@ Paper main-thread 콜백은 `OnPaperMainThreadStartup`·`OnPaperMainThreadShutdo
 기존 PaperStart/PaperStop의 phase/phaseString은 호환 경로다. 명시적 관계가 숫자 정렬보다 우선한다.
 소비자의 `onApplicationStartupFailure`는 부분 시작 정리 이후 호출된다.
 
-SpringPaperModule SPI는 코어가 호출하고 선택 모듈이 구현한다. META-INF/services 등록과 enabledProperty/configurationClass를 제공하면 활성화된 모듈 구성만 컨텍스트에 들어온다. provider 생성자는 I/O와 자원 생성을 하지 않는다.
+기본 제공 JDBC·JPA·Cache·PDC·Security는 `AutoConfiguration.imports`와
+`@ConditionalOnProperty(..., havingValue="true")`로 연결한다. flag 누락·false는 비활성이며 기존
+기본 자원/사용자 자원 재사용·JPA worker-only·schema·cache transaction 계약을 유지한다.
+native Boot DB/cache 구성으로의 치환이나 모든 starter 지원은 현재 범위가 아니다.
+기존 제공자의 자원 선택·backoff·alias helper도 보존했다. Boot 조건부 wrapper 도입을
+기본 제공자의 모든 보정 제거와 같은 것으로 해석하지 않는다.
+사용자 `SpringPaperModule` SPI는 기존 Paper 진입점에서만 호환으로 실행한다.
+`META-INF/services`와 enabledProperty/configurationClass로 활성 구성을 제공하며 같은 provider는 한 번만
+호출한다. ordinary root는 이 SPI를 실행하지 않는다. provider 생성자는 I/O와 자원을 만들지 않는다.
 
 PaperEventOrderContributor SPI는 소비자의 최상위 구성 모듈이 구현하고 코어가 native 등록 전에 한 번 호출한다. 반환한 PaperEventRelation의 event·priority 범위에서 before/after를 메서드 관계와 같은 그래프에 합친다. 다른 역할에서 빠진 리스너를 생성하지 않으며, 순환이면 등록 전에 실패한다. 기능 구현끼리 순서 때문에 의존하도록 만들지 않는다.
 
@@ -264,6 +336,7 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | 라이브러리 | 고정 검증 버전 |
 |---|---|
 | Java / Paper API | 25 / 26.3.build.244-stable |
+| Spring Boot core / autoconfigure | 4.1.2 / 4.1.2 |
 | Spring Framework | 7.0.10 |
 | Spring Data BOM / JPA | 2026.0.2 / BOM에서 선택 |
 | Spring Security | 7.1.2 |
@@ -273,4 +346,9 @@ Paper 입력 어댑터와 사용자 lifecycle 훅은 eager singleton이어야 �
 | Gradle / run-paper / Shadow | 9.6.1 / 3.0.2 / 9.6.0 |
 | Lombok (compileOnly / annotationProcessor) | 1.18.48 |
 
-서버 API와 SLF4J 구현은 Shadow JAR에 포함하지 않는다. Spring/Hibernate 및 SPI 서비스 메타데이터는 소비자 JAR에 포함·병합한다. 호환되지 않는 Spring 버전을 여러 플러그인이 동시에 사용하는 환경이나 별도 relocation 정책은 현재 검증 범위에 포함되지 않는다.
+서버 API·Guice·SLF4J 구현은 Shadow JAR에 포함하지 않는다. Spring/Hibernate 서비스,
+`META-INF/spring/*.imports`, `META-INF/spring.factories`는 소비자 flat JAR에 병합한다.
+`WebApplicationType.NONE`을 강제하며 Servlet API·Spring Web·웹 컨테이너 runtime 의존성을 금지한다.
+허용한 Boot core 자체의 미활성 Servlet/reactive adapter 클래스는 포함된다. 원본 4.1.2 core와
+최종 JAR의 bytecode를 비교하는 독립 소비자 검증에서 이 출처도 확인한다.
+호환되지 않는 Spring 버전 여러 개나 별도 relocation 정책은 현재 검증 범위에 포함되지 않는다.

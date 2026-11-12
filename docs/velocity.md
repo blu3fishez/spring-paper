@@ -1,8 +1,64 @@
 # Velocity 호스트 연결
 
-`spring-paper-velocity`는 Velocity가 생성한 플러그인 하나를 Spring 컨텍스트 하나에 연결한다.
-Java 25·Velocity API 4.2.1-SNAPSHOT·Spring Framework 7.0.10을 사용한다. Paper core, Spring Boot,
-추가 DI 컨테이너를 포함하지 않는다. Velocity의 native `@Plugin`·Guice 생성자가 호스트 진입점을 소유한다.
+`spring-paper-velocity`는 Velocity의 native 플러그인 하나를 Spring 컨텍스트 하나에 연결한다.
+Java 25·Velocity 4.2.1-SNAPSHOT build 43·Spring Framework 7.0.10과 실제
+Spring Boot **4.1.2 core + autoconfigure**를 사용한다. Paper core는 포함하지 않는다.
+공통 bootstrap은 `WebApplicationType.NONE`을 강제하며 Spring Web·Servlet API·웹 서버·starter를 넣지 않는다.
+허용한 Boot core 자체의 미활성 Servlet/reactive adapter 클래스는 최종 JAR에도 포함된다.
+
+## Ordinary 애플리케이션
+
+별도 Gradle 프로젝트에서 host 하나를 선택한다.
+
+```groovy
+plugins { id 'org.blu3fishez.spring-velocity' }
+version = '0.1.0-SNAPSHOT'
+springVelocity {
+    apiCoordinate = 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
+    development {
+        version = '4.2.1-SNAPSHOT'
+        buildNumber = 43
+    }
+}
+```
+
+```java
+import org.blu3fishez.springpaper.velocity.annotation.SpringVelocityApplication;
+
+@SpringVelocityApplication(id = "gateway", name = "Gateway")
+public class GatewayApplication {}
+```
+
+ordinary root는 Spring이 만들며 root 아래 `@Service`·`@ConfigurationProperties`를 발견한다.
+native JSON descriptor의 공용 `SpringVelocityApplicationPlugin` bridge만 Guice가 만든다.
+Gradle이 `velocity-plugin.json`과 자기 JAR의 `META-INF/spring-paper/application.properties`를 생성하므로
+native `@Plugin`과 annotation processor를 root에 추가하지 않는다. 버전은 Gradle project.version이다.
+`scanBasePackageClasses`/`configurationPropertiesScanBasePackageClasses`로 type-safe 범위를 지정한다.
+root 어노테이션은 `VelocityHostConfiguration`도 import하므로 IDE가 실제 호스트 빈 타입을 따라갈 수 있다.
+
+`help/tasks`에는 YAML이나 target이 필요 없다. `assemble`은 compile coordinate만 요구하고 실행
+target·DB·proxy secret을 읽지 않는다. 결과는 `bootJar`가 아닌 flat plugin JAR 하나다.
+`runVelocity`에는 명시 version/buildNumber가 필요하며 latest를 선택하지 않는다.
+Paper packaging plugin은 같은 프로젝트에 함께 적용하지 않는다.
+
+런타임과 forked pre-start는 자기 JAR와 native plugin dataDir의 선택적인 ConfigData를 읽는다.
+native cwd는 암묵적으로 검색하지 않으며 external base가 packaged profile보다 우선한다.
+환경 변수·JVM 프로퍼티·명시 location/import는 [공통 설정 계약](configuration.md)을 따른다.
+`application.yml`의 `spring.velocity.server` typed map에서 `velocity.toml`을 준비하며 boolean·정수·list와
+`servers.try` 순서를 보존한다. dotted key에는 `'[island.test]'` 같은 Boot bracket 표기를 쓴다.
+
+`prepareVelocityServer`는 기존 forwarding-secret-file 또는 실효 native secret 환경변수를 사용하며
+새/빈 run 디렉터리만 소유한다. hash drift를 감지하고 기존 미소유 파일에는 계획과 민감값을 가린
+`native-proposal.json`만 출력한다. plan-only에서는 secret source를 열지 않고 run도 중단한다.
+shared secret 생성/회전·기존 proxy 원격 등록은 수행하지 않는다. 세부 native YAML·경로·secret 전달과
+Paper backend 연결은 [ordinary 최소 예제](../examples/boot-velocity-plugin/README.md)를 따른다.
+
+## 기존 native 진입점 호환
+
+기존 native `@Plugin`·Guice 생성자와 명시 Configuration도 같은 Boot bootstrap으로 위임한다.
+이 경로에는 ordinary root scan·ConfigData 탐색을 자동 적용하지 않는다.
+새 Gradle 플러그인의 legacy `@Plugin` assemble은 지원하지만 새 `prepareVelocityServer`/`runVelocity`는
+ordinary root 전용이다. 기존 native 예제의 수동 빌드·실행 경로는 그대로 유지한다.
 
 ```gradle
 implementation 'org.blu3fishez.springpaper:spring-paper-velocity:0.1.0-SNAPSHOT'
@@ -10,7 +66,7 @@ compileOnly 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
 annotationProcessor 'com.velocitypowered:velocity-api:4.2.1-SNAPSHOT'
 ```
 
-## 진입점과 실제 호스트 빈
+## 기존 helper와 실제 호스트 빈
 
 ```java
 private final SpringVelocityApplication application;
@@ -78,7 +134,8 @@ Velocity의 `@Subscribe`에 선언한다. 별도 범용 플랫폼 SPI나 새로�
 ## 준비 상태·종료·경합
 
 컨텍스트 생성·initializer·refresh·모든 Spring `SmartLifecycle.start`가 끝난 뒤 입력을 등록한다.
-모든 등록에 성공한 뒤에만 `isReady()`가 true다. 설정·스캔·빈 생성·lifecycle·입력 등록 실패는
+모든 등록에 성공한 뒤에만 `isReady()`가 true이며 Boot ready/ACCEPTING 이벤트 전에 입력을 활성화한다.
+설정·스캔·빈 생성·lifecycle·입력 등록·ready listener 실패는
 소유 입력과 컨텍스트를 정리하고 native initialize EventTask에 예외를 전달한다.
 
 `shutdown()`을 호출하면 즉시 준비 상태를 내리고 새 입력 획득을 막으며, 이미 획득한 입력만 개별
@@ -113,14 +170,31 @@ bootstrap은 컨텍스트 생성부터 정리까지 plugin TCCL을 적용하고 
 
 ## 검증과 공식 구현 근거
 
-[최소 소비 예제](../examples/velocity-plugin/README.md)는 native 진입점, 실제 호스트 주입,
+[ordinary 소비 예제](../examples/boot-velocity-plugin/README.md)는 새 root·typed properties·Gradle
+플러그인·별도 native 준비 경로를 보여 준다. [기존 소비 예제](../examples/velocity-plugin/README.md)는 native 진입점, 실제 호스트 주입,
 새 listener/command의 자동 등록, 표준 `@Scheduled`와 scheduler 소유권을 보여 준다.
 API 호스트 자동 테스트는 반환한 실제 EventTask를 실행해 준비·시작 실패·종료 전 입력 해제·
 시작 전/refresh 중/native 등록 중 종료·CGLIB advice·alias 소유권·스케줄러 종료를 검증한다.
-별도 격리 검증에서는 정확한 Velocity build 43과 새 Maven 발행물로 실제 시작·명령·별칭·정상
+
+최종 ordinary JAR은 고정 build 43의 실제 JSON loader→PluginClassLoader→Guice→공통 bridge→실제
+Boot 경로로 검증한다. 두 loader의 own metadata/profile 분리·service/typed properties·준비 상태·정상
+종료·host 소유권과 implicit cwd 제외를 확인한다. 재현은 기존 native JAR을 사용하며 다운로드하지 않는다.
+
+```sh
+python3 spring-paper-velocity/src/nativeTest/verify-native-application.py \
+  --artifact examples/boot-velocity-plugin/build/libs/spring-velocity-boot-example-0.1.0-SNAPSHOT.jar
+```
+
+이 fixture는 controlled host bindings와 공개 EventTask 직접 실행이다. native plugin-manager의 이벤트
+dispatch, proxy 프로세스 기동, client 접속·forwarding을 검증한 결과가 아니다.
+`python3 scripts/verify-published-consumer.py`는 included build 없는 새 Velocity marker·전이 의존성·
+비웹 그래프·metadata 병합과 원본 Boot core adapter bytecode 출처를 별도로 검증한다.
+
+2026-11-11의 별도 격리 검증에서는 기존 native helper와 정확한 Velocity build 43·Maven 발행물로 실제 시작·명령·별칭·정상
 종료를 확인했다. 첫 실행은 60초 Scheduled 로그를, alias 수정 후 두 번째 실행은 해당 Spring
 경고의 소멸을 확인했다. [실행·테스트 수와 범위](verification.md#2026-11-11-velocity-호스트-어댑터)를
-참고한다. 기존 개발 서버는 변경하지 않았으며 실제 클라이언트·Mojang 인증 검증은 포함하지 않는다.
+참고한다. 이는 Boot 전환 후의 proxy 프로세스 실행 결과가 아니다. 기존 개발 서버는 변경하지 않았으며
+실제 클라이언트·Mojang 인증 검증은 포함하지 않는다.
 
 설계 전에 확인한 공식 문서·소스:
 

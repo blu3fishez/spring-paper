@@ -1,10 +1,14 @@
 # Spring Paper
 
-Spring Framework를 Paper 플러그인에 연결하는 독립 라이브러리다. Spring Boot와 별도 제공 플러그인을 요구하지 않는다. Paper가 만든 플러그인 인스턴스와 플러그인별 하나의 컨텍스트를 사용한다.
+하나의 큰 Paper 플러그인 안에서 Spring 업무 모듈을 조립하는 서버 애플리케이션 라이브러리다.
+Spring Boot **4.1.2 core + autoconfigure**를 사용하며, native 호스트가 만든 플러그인과
+플러그인별 하나의 비웹 컨텍스트를 연결한다. 별도 제공 플러그인은 필요 없다.
 
-Velocity는 독립적인 [`spring-paper-velocity`](docs/velocity.md) 모듈로 연결한다. native Guice 진입점은
-유지하고 initialize/shutdown EventTask와 실제 호스트 빈·활성 입력 등록·정리 소유권을 제공한다.
-Paper 모듈 없이 사용하는 [최소 예제](examples/velocity-plugin/README.md)가 있다.
+Paper는 [`@SpringPaperApplication`](examples/boot-paper-plugin/README.md), 별도 Velocity 프로젝트는
+[`@SpringVelocityApplication`](examples/boot-velocity-plugin/README.md) ordinary root에서 시작한다.
+일반 `@Service`와 typed `@ConfigurationProperties`를 root 패키지 아래에서 발견한다.
+결과는 native 호스트가 읽는 **flat plugin JAR 하나**이며 `bootJar`를 만들지 않는다.
+Velocity는 독립 [`spring-paper-velocity`](docs/velocity.md) 모듈을 사용하고 Paper core를 포함하지 않는다.
 
 이 저장소는 초기 개발 단계다. Maven Central·Gradle Plugin Portal 공개 배포와 라이선스 선정은 아직 진행하지 않았다. 현재는 included build 또는 로컬 Maven 배포로 사용한다.
 
@@ -12,16 +16,62 @@ Paper 모듈 없이 사용하는 [최소 예제](examples/velocity-plugin/README
 
 [기존 라이브러리 비교](docs/research/existing-libraries.md)에 8개 Spring 후보의 소스·유지보수·종료 계약을 정리했다. 확인한 후보에 현재 요구를 충족하는 즉시 도입 대상이 없어 제작했다. 개발 서버 다운로드·실행은 [run-paper](https://github.com/jpenilla/run-task)를 재사용한다.
 
-현재 검증 기준은 Java 25, Paper 26.3 build 244, Spring Framework 7.0.10이다. Data·Security·Hibernate 조합은 [공식 의존성 조합](https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/4.1.2/spring-boot-dependencies-4.1.2.pom)을 참고해 직접 고정했다. Boot 코드를 실행하거나 Boot starter를 추가하지 않는다.
+현재 검증 기준은 Java 25, Paper 26.3 build 244, Velocity 4.2.1-SNAPSHOT build 43,
+Spring Framework 7.0.10이다. Data·Security·Hibernate의 기존 고정 조합도 유지한다.
+Boot starter, Spring Web·MVC·WebFlux, Servlet API, Tomcat·Jetty·Undertow·Reactor Netty 서버는 사용하지 않는다.
+공통 bootstrap은 `WebApplicationType.NONE`을 강제한다. 허용한 Boot core 자체에 들어 있는 비활성
+Servlet/reactive adapter 클래스는 JAR에 포함되며, 웹 의존성이나 서버 구현을 추가하지 않는다.
 
 [Spring 내부 구현과 확장 지점](docs/configuration.md#spring-내부-구현에서-확인한-확장-계약)에 컨텍스트·프록시·종료·트랜잭션·캐시의 책임을 정리했다. 발생한 문제의 원인은 해당 구현 옆의 한국어 주석과 [검증 기록](docs/verification.md#막혔던-지점과-코드-주석)에 남겼다.
 
-복사해서 쓸 작은 업무는 [business-plugin](examples/business-plugin/README.md)을 먼저 본다.
+새 앱은 [ordinary Paper 예제](examples/boot-paper-plugin/README.md)에서 시작한다.
+복사해서 쓸 작은 업무는 [business-plugin](examples/business-plugin/README.md)을 참고한다.
 [전후 비교·검증](docs/usability-contracts.md), [실행 완료/취소](docs/execution-contracts.md), [기본/전용 빈](docs/default-beans.md),
 [선택 기능](docs/optional-features.md)의 지원 계약을 사용한다.
-모듈별 책임·확장 경계와 이번 재현 결과는 [책임·사용성 점검](docs/architecture-audit.md)에 정리했다.
+기존 모듈의 책임·확장 경계는 [책임·사용성 점검](docs/architecture-audit.md)에 정리했다.
+현재 Boot 전환 사양과 검증 범위는 [채택 사양·제품 검증](docs/boot-application-design.md#11-제품-구현과-검증-현황)을 따른다.
 
 ## 진입점
+
+```java
+import org.blu3fishez.springpaper.annotation.SpringPaperApplication;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+
+@SpringPaperApplication(name = "GameServer")
+public class GameServerApplication {}
+
+@ConfigurationProperties("game")
+public record GameSettings(@DefaultValue("Welcome") String greeting) {}
+```
+
+root와 같은 패키지 또는 하위 패키지에 `@Service`·`@Configuration`·typed properties를 둔다.
+범위를 바꿀 때는 `scanBasePackageClasses`와 `configurationPropertiesScanBasePackageClasses`의
+type-safe marker를 사용한다. root는 Spring이 만들고, Paper는 공용 native bridge만 만든다.
+Gradle 플러그인이 자기 JAR의 root metadata와 `plugin.yml`을 생성한다. `version`은 프로젝트 버전이다.
+
+```groovy
+plugins { id 'org.blu3fishez.spring-paper' }
+version = '0.1.0-SNAPSHOT'
+springPaper {
+    paper {
+        apiCoordinate = 'io.papermc.paper:paper-api:26.3.build.244-stable'
+        apiVersion = '26.3'
+    }
+    development {
+        minecraftVersion = '26.3'
+        build = 244
+        acceptEula = false
+    }
+}
+```
+
+현재 소비 방법은 예제의 included build 또는 로컬 Maven 배포다. `help/tasks`에는 YAML이나 target이
+필요 없고, `assemble`에는 compile target과 공개 descriptor만 필요하다. 실행 target·DB·proxy secret은
+준비/실행 단계에서 평가한다. 런타임 YAML은 선택 사항이며 자기 JAR와 플러그인 dataDir에서 읽는다.
+외부 profile/import·실행 설정 위치는 [설정 계약](docs/configuration.md)에 정리했다.
+
+## 기존 native 진입점 호환
 
 ```java
 @SpringPaperPluginApplication(
@@ -193,7 +243,11 @@ Security는 별도 `paperSecurityScheduler`를 사용한다. 같은 이름의 �
 [기능별 실행 예제](examples/README.md)를 제공한다. `PaperTasks`는 표준 `AsyncTaskExecutor`이므로
 `@EnableAsync`를 선택한 앱에서 `@Async("paperTasks")`로 재사용할 수 있다. 프록시를 거치는 독립 업무에만 사용한다.
 
-## YAML과 개발 서버
+## 기존 YAML 개발 설정 호환
+
+새 앱은 위 host별 DSL로 compile target과 개발 실행 target을 지정한다.
+기존 Paper 예제의 아래 YAML은 계속 fallback으로 지원한다. 명시 DSL이 우선하며,
+Gradle이 읽는 개발 설정과 플러그인 dataDir의 런타임 설정은 서로 다른 실행 단계다.
 
 ```yaml
 spring:
@@ -214,14 +268,17 @@ spring:
         online-mode: true
 ```
 
-설정 루트는 합의한 `spring.paper`다. [전체 설정 계약](docs/configuration.md)을 참고한다. `PaperServerInfo`는 YAML 대상과 별도로 실제 Minecraft·Bukkit·서버·Java 버전을 제공한다.
+기존 Paper 개발 설정 루트는 `spring.paper`다. [전체 설정 계약](docs/configuration.md)을 참고한다. `PaperServerInfo`는 YAML 대상과 별도로 실제 Minecraft·Bukkit·서버·Java 버전을 제공한다.
 
 ## 선택적 Spring 생태계
 
 Spring Paper는 Paper 호스트를 표준 Spring ApplicationContext에 연결한다. 기존 Spring 라이브러리는
 의존성을 추가하고 같은 컨텍스트에 표준 Configuration·빈을 등록해 사용한다. 각 선택 모듈은
 해당 생태계의 기본 구성과 Paper 연결을 제공한다. 어노테이션·저장소·인가 처리는 Spring 구현에 맡긴다.
-Spring Boot 런타임과 starter 자동 구성은 사용하지 않는다.
+같은 Boot 컨텍스트에서 각 모듈의 `AutoConfiguration.imports`로 기본 구성을 연결한다.
+임의의 Boot starter 지원을 보장하지 않으며 native Boot DataSource/JPA/JDBC·Cache 구성으로의
+치환은 후속 범위다. 현재 모듈의 자원·트랜잭션·종료 소유권을 유지한다.
+기존 제공자의 자원 선택·backoff·alias 보정도 유지하며 모두 Boot 조건으로 치환한 상태는 아니다.
 
 | 모듈 | 제공 기능 | 활성화 |
 |---|---|---|
@@ -231,9 +288,11 @@ Spring Boot 런타임과 starter 자동 구성은 사용하지 않는다.
 | `spring-paper-cache` | Spring Cache, Caffeine 기본 제공자, 커밋 뒤 캐시 변경, 기존 CacheManager 재사용 | `spring.paper.cache.enabled` |
 | `spring-paper-security` | 메서드 인가, 소비자 교체형 인증 문맥·거절 처리, 선택형 Paper 접속 어댑터 | `spring.paper.security.enabled` |
 | `spring-paper-security-core` | 호스트 중립 인증 필터·세션·대기·결과 처리, Spring AuthenticationManager/Provider 연동 | Paper Security가 자동 import; 단독 소비는 `@Import(PaperConnectionSecurityConfiguration.class)` |
-| `spring-paper-velocity` | native Velocity bootstrap, 실제 호스트 빈, 활성 listener/command 등록·해제 | native 진입점에서 `SpringVelocityApplication`에 위임 |
+| `spring-paper-velocity` | native Velocity bootstrap, 실제 호스트 빈, 활성 listener/command 등록·해제 | ordinary `@SpringVelocityApplication` 또는 기존 native helper |
 
-YAML 자동 구성에는 모듈 JAR과 enabled가 필요하다. PDC의 명시적인 Enable 어노테이션은 해당 구성에서 직접 활성화한다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
+YAML 자동 구성에는 모듈 JAR과 명시적인 enabled=true가 필요하며 누락·false는 비활성이다.
+기본 제공 모듈은 Boot imports로 발견하고, 사용자 `SpringPaperModule` SPI는 기존 진입점의 호환 경로로 유지한다.
+PDC의 명시적인 Enable 어노테이션은 해당 구성에서 직접 활성화한다. JPA의 기본 DDL 정책은 validate다. 예제의 create-drop은 격리된 H2 검증 데이터 전용이다. 운영 MariaDB 스키마는 기존 마이그레이션으로 관리한다.
 
 PDC 저장소의 [사용법과 저장 계약](docs/configuration.md#pdc)을 참고한다. 기존 키·UUID 문자열·숫자 타입을 선언으로 매핑하고, 아이템 변경 반영과 관련 없는 키 보존은 모듈이 맡는다. 게임 규칙·스키마 이관·엔티티 조회는 소비자가 소유한다.
 
@@ -255,14 +314,23 @@ Security는 호출마다 인증 문맥을 설정하고 finally에서 이전 문�
 
 ```sh
 ./gradlew build
+./gradlew -p examples/boot-paper-plugin assemble
+./gradlew -p examples/boot-velocity-plugin assemble
 ./gradlew -p examples/guide-plugin build
 ./gradlew -p examples/guide-plugin preparePaperServer
-./gradlew -p examples/guide-plugin runServer
 ```
 
-`python3 scripts/verify-published-consumer.py`는 build/verification-repository에 Maven 배포물을 만들고 included build 없이 별도 소비 프로젝트를 빌드한다. 플러그인 marker와 모듈 의존성, 설정 캐시 재사용, SPI 병합과 호스트 API 제외를 확인한다. ~/.m2와 외부 배포 저장소에는 게시하지 않는다.
+`python3 scripts/verify-published-consumer.py`는 `build/verification-repository`에만 Maven 배포물을 만들고
+included build 없는 기존 guide·ordinary Paper·ordinary Velocity 소비 프로젝트를 빌드한다.
+두 플러그인 marker, Boot 전이 의존성·비웹 그래프, 설정 캐시 재사용, Boot metadata 병합,
+현재 라이브러리 bytecode와 호스트 API 제외를 확인한다. `~/.m2`와 외부 저장소에는 게시하지 않는다.
 
-예제는 included build로 이 저장소의 라이브러리와 Gradle 플러그인을 사용한다. `runServer`는 지정한 Paper 빌드를 다운로드하고 예제 Shadow JAR을 연결한다. EULA는 사용자가 확인한 뒤 YAML에서 명시적으로 수락한다. 기본값은 false다.
+예제는 included build로 현재 소스를 사용한다. `preparePaperServer`/`prepareVelocityServer`는 새 owned
+run 디렉터리에 native 설정과 hash를 기록하고 수동 변경을 감지한다. 기존 미소유 파일은 계획만 출력한다.
+Paper의 `runServer`, Velocity의 `runVelocity`는 각각 지정한 host build와 자기 JAR을 사용한다.
+실제 host 실행과 EULA 수락은 현재 전환 검증에 포함하지 않았다. EULA 기본값은 false다.
+기존 Velocity의 backend 연결과 shared secret 준비 책임은 [Paper 예제](examples/boot-paper-plugin/README.md)와
+[Velocity 예제](examples/boot-velocity-plugin/README.md)에 있다. 원격 proxy 등록이나 secret 생성·회전은 수행하지 않는다.
 
 예제 플러그인은 실제 Paper 커스텀 이벤트와 선후 관계·엔티티/아이템 PDC·콘솔 명령·JPA 저장/조회·캐시·메서드 인가와 소비자 Provider의 인증 대기·추가 증거·완료·정리를 검사하고 `SPRING_PAPER_SMOKE_OK` 및 plugins/SpringPaperExample/smoke-success.txt를 남긴다. 종료 훅은 smoke-stop.txt를 남긴다. 인증 증거는 합성 검증용이며 실제 Minecraft/Discord 인증기나 클라이언트 검증을 대신하지 않는다.
 

@@ -1,0 +1,14 @@
+gateway:
+  greeting: Welcome
+# Native server settings are consumed by prepareVelocityServer/runVelocity, before plugin load.
+# Set forwarding-secret-file to an existing shared file before preparation or execution.
+spring:
+  velocity:
+    server:
+      bind: '0.0.0.0:25577'
+      online-mode: true
+      player-info-forwarding-mode: modern
+      forwarding-secret-file: '${VELOCITY_FORWARDING_SECRET_FILE}'
+      servers:
+        lobby: '127.0.0.1:25565'
+        try: [lobby]

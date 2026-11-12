@@ -1,0 +1,1 @@
+org.springframework.boot.SpringApplicationRunListener=org.blu3fishez.springpaper.boot.NativeReadyRunListener

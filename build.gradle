@@ -1,6 +1,7 @@
 plugins { id 'base' }
 
 ext {
+    bootVersion = '4.1.2'
     springVersion = '7.0.10'
     springDataVersion = '2026.0.2'
     springSecurityVersion = '7.1.2'
@@ -63,5 +64,7 @@ tasks.register('verifySourceSize') {
         if (!oversized.empty) throw new GradleException("Files exceed 600 lines: ${oversized}")
     }
 }
-tasks.named('check') { dependsOn 'verifySourceSize', subprojects.collect { it.tasks.named('check') } }
+apply from: 'gradle/verify-non-web.gradle'
+
+tasks.named('check') { dependsOn 'verifySourceSize', 'verifyNonWebRuntime', subprojects.collect { it.tasks.named('check') } }
 tasks.named('assemble') { dependsOn subprojects.collect { it.tasks.named('assemble') } }
